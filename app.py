@@ -3,12 +3,13 @@ import sys
 import time
 
 from dotenv import load_dotenv
-from flask import Flask, jsonify, render_template, request, session
+from flask import Flask, Response, jsonify, render_template, request, session, stream_with_context
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_neo4j import Neo4jVector
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from openai import OpenAI
 
 # .envファイルから環境変数を読み込む（Render本番ではEnvironment Variablesを利用）
 load_dotenv()
@@ -32,6 +33,17 @@ if os.getenv("RENDER"):
 db = None
 retriever = None
 rag_chain = None
+LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "120"))
+LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "1024"))
+RETRIEVER_K = int(os.getenv("RETRIEVER_K", "3"))
+MODEL_NAME = os.getenv("LLM_MODEL", "GLM-4.7")
+
+# OpenAI互換APIクライアント（ストリーミング用）
+zai_client = OpenAI(
+    api_key=os.getenv("ZAI_API_KEY"),
+    base_url="https://api.z.ai/api/paas/v4/",
+    timeout=LLM_TIMEOUT,
+)
 
 # BtoC向けSystemプロンプト
 SYSTEM_PROMPT_TEMPLATE = """あなたは「ナナカファームのクレソン料理アドバイザー」です。
@@ -88,17 +100,17 @@ def initialize_rag_system():
         )
         print("✓ Neo4j接続成功")
 
-        retriever = db.as_retriever(search_kwargs={"k": 3})
+        retriever = db.as_retriever(search_kwargs={"k": RETRIEVER_K})
         print("✓ Retriever作成完了")
 
         print("LLMを初期化中...")
         llm = ChatOpenAI(
-            model="glm-4.7",
+            model=MODEL_NAME,
             openai_api_key=os.getenv("ZAI_API_KEY"),
             openai_api_base="https://api.z.ai/api/paas/v4/",
             temperature=0.7,
-            timeout=60.0,
-            max_tokens=4096,  # GLM-4.7の推論モード対策
+            timeout=LLM_TIMEOUT,
+            max_tokens=LLM_MAX_TOKENS,
         )
         print("✓ LLM初期化完了")
 
@@ -175,14 +187,17 @@ def chat():
 
         messages.append({"role": "user", "content": user_message})
 
-        max_retries = 5
+        max_retries = int(os.getenv("LLM_MAX_RETRIES", "4"))
         assistant_message = None
         source_docs = []
 
         for attempt in range(max_retries):
             try:
+                t0 = time.time()
                 source_docs = retriever.invoke(user_message)
                 response = rag_chain.invoke(user_message)
+                elapsed = time.time() - t0
+                print(f"LLM応答取得: {elapsed:.2f}s")
 
                 if hasattr(response, "content"):
                     assistant_message = response.content or getattr(
@@ -244,6 +259,93 @@ def chat():
     except Exception as e:
         error_message = f"エラーが発生しました: {str(e)}"
         print(f"Error in /chat: {error_message}")
+        import traceback
+
+        print(f"Traceback: {traceback.format_exc()}")
+        return jsonify({"error": error_message}), 500
+
+
+@app.route("/chat_stream", methods=["POST"])
+def chat_stream():
+    try:
+        if not ensure_rag_system_initialized():
+            return (
+                jsonify(
+                    {
+                        "error": "RAGシステムの初期化に失敗しました。環境変数とNeo4jインデックスをご確認ください。"
+                    }
+                ),
+                500,
+            )
+
+        data = request.json
+        user_message = (data.get("message", "") if data else "").strip()
+        if not user_message:
+            return jsonify({"error": "メッセージが空です"}), 400
+
+        if "messages" not in session:
+            session["messages"] = []
+
+        messages = session["messages"]
+        if len(messages) > 10:
+            messages = messages[-10:]
+
+        messages.append({"role": "user", "content": user_message})
+
+        # RAG検索は先に確定させ、プロンプトに埋め込んでストリーミング生成する
+        source_docs = retriever.invoke(user_message)
+        context_text = format_docs(source_docs)
+        prompt_text = SYSTEM_PROMPT_TEMPLATE.format(context=context_text, question=user_message)
+
+        @stream_with_context
+        def generate():
+            full_text_parts = []
+            t0 = time.time()
+            first_chunk_time = None
+            try:
+                stream = zai_client.chat.completions.create(
+                    model=MODEL_NAME,
+                    messages=[{"role": "user", "content": prompt_text}],
+                    stream=True,
+                    temperature=0.7,
+                    max_tokens=LLM_MAX_TOKENS,
+                )
+                for event in stream:
+                    if not event or not getattr(event, "choices", None):
+                        continue
+                    choice0 = event.choices[0]
+                    delta = getattr(choice0, "delta", None)
+                    token = getattr(delta, "content", None) if delta else None
+                    if not token:
+                        continue
+                    if first_chunk_time is None:
+                        first_chunk_time = time.time() - t0
+                        print(f"TTFB（最初のチャンク）: {first_chunk_time:.2f}s")
+                    full_text_parts.append(token)
+                    yield token
+            except Exception as e:
+                yield f"\n[ERROR] {str(e)}"
+            finally:
+                answer = "".join(full_text_parts).strip()
+                if answer:
+                    messages.append({"role": "assistant", "content": answer})
+                    session["messages"] = messages
+                    session.modified = True
+                total = time.time() - t0
+                print(f"LLM完了: {total:.2f}s")
+
+        return Response(
+            generate(),
+            mimetype="text/plain; charset=utf-8",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    except Exception as e:
+        error_message = f"エラーが発生しました: {str(e)}"
+        print(f"Error in /chat_stream: {error_message}")
         import traceback
 
         print(f"Traceback: {traceback.format_exc()}")

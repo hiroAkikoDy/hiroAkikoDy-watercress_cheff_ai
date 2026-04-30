@@ -391,6 +391,33 @@
     chatArea.scrollTop = chatArea.scrollHeight;
   }
 
+  function addBotMessagePlaceholder() {
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'message bot';
+
+    const avatar = document.createElement('div');
+    avatar.className = 'avatar';
+    avatar.textContent = '🌿';
+
+    const messageContent = document.createElement('div');
+    messageContent.className = 'message-content';
+    messageContent.textContent = '';
+
+    messageDiv.appendChild(avatar);
+    messageDiv.appendChild(messageContent);
+    chatArea.appendChild(messageDiv);
+
+    chatArea.scrollTop = chatArea.scrollHeight;
+    return messageContent;
+  }
+
+  function appendBotDelta(messageContentEl, deltaText) {
+    const current = messageContentEl.textContent || '';
+    messageContentEl.textContent = current + deltaText;
+    messageContentEl.innerHTML = (messageContentEl.textContent || '').replace(/\n/g, '<br>');
+    chatArea.scrollTop = chatArea.scrollHeight;
+  }
+
   function showLoading() {
     const loadingDiv = document.createElement('div');
     loadingDiv.className = 'message bot';
@@ -435,26 +462,44 @@
     addMessage(message, true);
     userInput.value = '';
     sendBtn.disabled = true;
-    showLoading();
+    // ストリーミング表示用の吹き出しを先に作る
+    const botEl = addBotMessagePlaceholder();
 
     try {
-      const response = await fetch('/chat', {
+      const response = await fetch('/chat_stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: message })
       });
 
-      const data = await response.json();
-      hideLoading();
+      if (!response.ok) {
+        // フォールバック（非ストリーミング: 出典付き）
+        const fallback = await fetch('/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: message })
+        });
+        const data = await fallback.json();
+        if (data.error) {
+          botEl.innerHTML = ('エラー: ' + data.error).replace(/\n/g, '<br>');
+        } else {
+          // 出典表示を維持するため、通常描画関数で再描画（プレースホルダはそのまま簡易表示）
+          botEl.innerHTML = (data.reply || '').replace(/\n/g, '<br>');
+          // sourcesは“追記”ではなく、既存UI設計上は別メッセージに紐づくため、ここでは簡易に表示しない
+        }
+        return;
+      }
 
-      if (data.error) {
-        addMessage('エラー: ' + data.error, false);
-      } else {
-        addMessage(data.reply, false, data.sources);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        const chunkText = decoder.decode(value, { stream: true });
+        appendBotDelta(botEl, chunkText);
       }
     } catch (error) {
-      hideLoading();
-      addMessage('通信エラーが発生しました。もう一度お試しください。', false);
+      botEl.innerHTML = '通信エラーが発生しました。もう一度お試しください。';
     } finally {
       sendBtn.disabled = false;
       userInput.focus();
