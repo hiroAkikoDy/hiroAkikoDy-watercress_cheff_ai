@@ -1,18 +1,36 @@
+# 環境変数ファイル（APIキー等の機密情報を含む）
 .env
 .env.*
 !.env.example
 
-__pycache__/
-*.py[cod]
-.Python
-*.egg-info/
-dist/
-build/
-
+# 仮想環境フォルダ
+chatgpt_kaiwa/
 .venv/
 venv/
 ENV/
 
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# OS
 .DS_Store
 Thumbs.db
-
