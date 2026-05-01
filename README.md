@@ -45,6 +45,12 @@ SHOW INDEXES;
 
 このリポジトリには `render.yaml` を含めています。Renderで「New +」→「Blueprint」から読み込むと、サービス設定が自動作成されます。
 
+**注意（重要）**: Blueprint から作成した Web Service でも、後から Render ダッシュボードで **Start Command** を手動変更すると、リポジトリの `render.yaml` と齟齬が出ます。  
+以下のエラーは、その典型例です。
+
+- `ModuleNotFoundError: No module named 'app_v1'`  
+  → Render が `gunicorn app_v1:app` を起動しようとしているが、本リポジトリのエントリポイントは **`app.py`（`app:app`）** です。
+
 ### 手動設定する場合
 
 - **Build Command**: `pip install -r requirements.txt`
@@ -54,4 +60,15 @@ SHOW INDEXES;
   - `ZAI_API_KEY`
   - `SECRET_KEY`（長いランダム文字列推奨）
   - （任意）`PYTHON_VERSION`（例: `3.11.9`）
+
+### Render ダッシュボードでの修正手順（`app_v1` エラー対策）
+
+1. Render の対象 Web Service を開く  
+2. **Settings** → **Start Command** を確認  
+3. 次のいずれかに揃える  
+   - **推奨**: `gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 120`  
+4. **Environment** に `PYTHON_VERSION=3.11.9` が入っているか確認（未設定だと、ログ上は Python 3.14 系で動くことがあります）  
+5. **Manual Deploy**（または **Save Changes** 後の再デプロイ）を実行
+
+参考: [Render: Troubleshooting deploys](https://render.com/docs/troubleshooting-deploys)
 
