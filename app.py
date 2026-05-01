@@ -34,9 +34,9 @@ db = None
 retriever = None
 rag_chain = None
 LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "120"))
-LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "1024"))
+LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "2048"))
 RETRIEVER_K = int(os.getenv("RETRIEVER_K", "3"))
-MODEL_NAME = os.getenv("LLM_MODEL", "GLM-4.7")
+MODEL_NAME = os.getenv("LLM_MODEL", "GLM-4.7-Flash")
 
 # OpenAI互換APIクライアント（ストリーミング用）
 zai_client = OpenAI(
@@ -293,8 +293,21 @@ def chat_stream():
         messages.append({"role": "user", "content": user_message})
 
         # RAG検索は先に確定させ、プロンプトに埋め込んでストリーミング生成する
-        source_docs = retriever.invoke(user_message)
-        context_text = format_docs(source_docs)
+        try:
+            source_docs = retriever.invoke(user_message)
+            context_text = format_docs(source_docs)
+        except Exception as neo4j_err:
+            print(f"Neo4j検索エラー、再接続を試みます: {neo4j_err}")
+            if initialize_rag_system():
+                try:
+                    source_docs = retriever.invoke(user_message)
+                    context_text = format_docs(source_docs)
+                except Exception:
+                    context_text = "（データ取得に失敗しました）"
+                    source_docs = []
+            else:
+                context_text = "（データベース接続に失敗しました）"
+                source_docs = []
         prompt_text = SYSTEM_PROMPT_TEMPLATE.format(context=context_text, question=user_message)
 
         @stream_with_context
