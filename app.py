@@ -98,12 +98,6 @@ def initialize_rag_system():
             keyword_index_name="watercress_keyword_index",
             search_type="hybrid",
             database=os.getenv("NEO4J_USERNAME"),  # Aura Free特有の設定
-            driver_config={
-                "connection_timeout": 10,
-                "max_connection_lifetime": 300,
-                "max_connection_pool_size": 5,
-                "connection_acquisition_timeout": 30,
-            }
         )
         print("✓ Neo4j接続成功")
 
