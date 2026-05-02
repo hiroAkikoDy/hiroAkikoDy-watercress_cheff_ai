@@ -386,18 +386,25 @@ def neo4j_keepalive():
             initialize_rag_system()
 
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    print(f"\nFlaskアプリを起動します (ポート: {port})")
-    
-    # RAGシステムの初期化
-    initialize_rag_system()
-    
-    # Neo4jキープアライブスレッドの開始
+def start_keepalive():
+    """Gunicorn・Flaskの両方でkeepaliveを起動する"""
     keepalive_thread = threading.Thread(
         target=neo4j_keepalive, daemon=True
     )
     keepalive_thread.start()
-    
+    print("Neo4j keepaliveスレッド開始")
+
+
+# モジュール読み込み時に実行（Gunicornでも動く）
+start_keepalive()
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    print(f"\nFlaskアプリを起動します (ポート: {port})")
+
+    # RAGシステムの初期化
+    initialize_rag_system()
+
     app.run(host="0.0.0.0", port=port, debug=False)
 
