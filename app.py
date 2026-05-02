@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import threading
 
 from dotenv import load_dotenv
 from flask import Flask, Response, jsonify, render_template, request, session, stream_with_context
@@ -97,6 +98,12 @@ def initialize_rag_system():
             keyword_index_name="watercress_keyword_index",
             search_type="hybrid",
             database=os.getenv("NEO4J_USERNAME"),  # Aura Free特有の設定
+            driver_config={
+                "connection_timeout": 10,
+                "max_connection_lifetime": 300,
+                "max_connection_pool_size": 5,
+                "connection_acquisition_timeout": 30,
+            }
         )
         print("✓ Neo4j接続成功")
 
@@ -372,8 +379,31 @@ def reset():
     return jsonify({"status": "ok"})
 
 
+def neo4j_keepalive():
+    """Neo4j接続を維持するためのキープアライブスレッド"""
+    while True:
+        time.sleep(270)
+        try:
+            if db is not None:
+                db._driver.verify_connectivity()
+                print("Neo4j keepalive: OK")
+        except Exception as e:
+            print(f"Neo4j keepalive error: {e}")
+            initialize_rag_system()
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     print(f"\nFlaskアプリを起動します (ポート: {port})")
+    
+    # RAGシステムの初期化
+    initialize_rag_system()
+    
+    # Neo4jキープアライブスレッドの開始
+    keepalive_thread = threading.Thread(
+        target=neo4j_keepalive, daemon=True
+    )
+    keepalive_thread.start()
+    
     app.run(host="0.0.0.0", port=port, debug=False)
 
