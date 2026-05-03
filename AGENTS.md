@@ -187,6 +187,23 @@ langchain_study/              # 学習・実験用スクリプト（本番とは
 
 ---
 
+## スプリント計画（Sprint 3）
+
+現在のスプリント: **2026-05-03〜**
+
+| Issue | タイトル | 優先度 | ラベル |
+|-------|---------|--------|--------|
+| [#1](https://github.com/hiroAkikoDy/hiroAkikoDy-watercress_cheff_ai/issues/1) | 190品フルデータをNeo4jに投入してRAG回答精度を向上させる | 高 | `enhancement` `neo4j` |
+| [#2](https://github.com/hiroAkikoDy/hiroAkikoDy-watercress_cheff_ai/issues/2) | nanaka-farm.comにクレソンAIチャットへのリンクを設置する | 中 | `enhancement` `website` |
+| [#3](https://github.com/hiroAkikoDy/hiroAkikoDy-watercress_cheff_ai/issues/3) | Vol.4ブログ執筆「Claude Code×デプロイ×GLM-4.7エラー5時間の記録」 | 低 | `documentation` `blog` |
+
+### マイルストーン
+- **#1 完了条件**: Neo4j Chunkノード190件以上 + ハイブリッド検索で多様な回答
+- **#2 完了条件**: nanaka-farm.comからチャットアプリへ遷移可能
+- **#3 完了条件**: Zenn公開URLの取得 + 4000字以上
+
+---
+
 ## コーディング規約
 
 ```
