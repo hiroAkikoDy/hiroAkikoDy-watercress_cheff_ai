@@ -515,8 +515,10 @@
         const lines = chunkText.split('\n');
         for (const line of lines) {
           if (line.startsWith('data: ')) {
-            const token = line.slice(6);
-            if (token) appendBotDelta(botEl, token);
+            const token = line.slice(6).trim();
+            if (token && token !== '[DONE]') {
+              appendBotDelta(botEl, token);
+            }
           }
         }
       }

@@ -329,8 +329,7 @@ def chat_stream():
                         continue
                     choice0 = event.choices[0]
                     delta = getattr(choice0, "delta", None)
-                    token = (getattr(delta, "content", None) or
-                             getattr(delta, "reasoning_content", None)) if delta else None
+                    token = getattr(delta, "content", None) if delta else None
                     if not token:
                         continue
                     if first_chunk_time is None:
