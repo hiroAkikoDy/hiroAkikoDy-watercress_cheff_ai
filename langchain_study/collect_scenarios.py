@@ -8,9 +8,7 @@ sys.stdout.reconfigure(encoding='utf-8')
 load_dotenv("../watercress_flask/.env")
 
 client = OpenAI(
-    api_key=os.getenv("ZAI_API_KEY"),
-    base_url="https://api.z.ai/api/paas/v4/",
-    timeout=60,
+    api_key=os.getenv("OPENAI_API_KEY"),
 )
 
 PERSONAS = [
@@ -72,7 +70,7 @@ def call_with_retry(messages, max_retries=3):
     for attempt in range(max_retries):
         try:
             response = client.chat.completions.create(
-                model="GLM-4.7-Flash",
+                model="gpt-4o-mini",
                 messages=messages,
                 temperature=0.7,
                 max_tokens=2048,
