@@ -153,6 +153,7 @@ hiroAkikoDy-watercress_cheff_ai/
 
 | 弾 | タイトル | 内容 |
 |---|---|---|
+| vol.0 | [Claudeと作った「世界のクレソン料理アトラス」](https://zenn.dev/hiroakikody/articles/d553384e195f0b) | はじめてのWebアプリ公開 |
 | Vol.1 | [参考書のサンプルコードをZ.aiで動かした](https://zenn.dev/hiroakikody/articles/e6ed27a649fcec) | Z.ai GLM-4.7-Flash × OpenAI互換API |
 | Vol.2 | [熊本のクレソン農家がAIチャットボットを作った](https://zenn.dev/hiroakikody/articles/ed0332b4c0f292) | Systemプロンプトのカスタマイズ・Flask化 |
 | Vol.3 | [LLMのAPIを「概念と構造」で理解する](https://zenn.dev/hiroakikody/articles/0de29fff1522f5) | temperature・RAG・Session・10問クイズ |
