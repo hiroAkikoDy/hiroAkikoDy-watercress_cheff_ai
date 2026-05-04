@@ -35,7 +35,7 @@ db = None
 retriever = None
 rag_chain = None
 LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "120"))
-LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "2048"))
+LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "4096"))
 RETRIEVER_K = int(os.getenv("RETRIEVER_K", "3"))
 MODEL_NAME = os.getenv("LLM_MODEL", "GLM-4.7-Flash")
 
@@ -374,9 +374,8 @@ def reset():
 
 
 def neo4j_keepalive():
-    """Neo4j接続を維持するためのキープアライブスレッド"""
+    time.sleep(30)
     while True:
-        time.sleep(270)
         try:
             if db is not None:
                 db._driver.verify_connectivity()
@@ -384,6 +383,7 @@ def neo4j_keepalive():
         except Exception as e:
             print(f"Neo4j keepalive error: {e}")
             initialize_rag_system()
+        time.sleep(270)
 
 
 def start_keepalive():
