@@ -496,7 +496,13 @@
         const { value, done } = await reader.read();
         if (done) break;
         const chunkText = decoder.decode(value, { stream: true });
-        appendBotDelta(botEl, chunkText);
+        const lines = chunkText.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const token = line.slice(6);
+            if (token) appendBotDelta(botEl, token);
+          }
+        }
       }
     } catch (error) {
       botEl.innerHTML = '通信エラーが発生しました。もう一度お試しください。';

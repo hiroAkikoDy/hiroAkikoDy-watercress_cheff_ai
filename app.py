@@ -329,14 +329,15 @@ def chat_stream():
                         continue
                     choice0 = event.choices[0]
                     delta = getattr(choice0, "delta", None)
-                    token = getattr(delta, "content", None) if delta else None
+                    token = (getattr(delta, "content", None) or
+                             getattr(delta, "reasoning_content", None)) if delta else None
                     if not token:
                         continue
                     if first_chunk_time is None:
                         first_chunk_time = time.time() - t0
                         print(f"TTFB（最初のチャンク）: {first_chunk_time:.2f}s")
                     full_text_parts.append(token)
-                    yield token
+                    yield f"data: {token}\n\n"
             except Exception as e:
                 yield f"\n[ERROR] {str(e)}"
             finally:
@@ -350,7 +351,7 @@ def chat_stream():
 
         return Response(
             generate(),
-            mimetype="text/plain; charset=utf-8",
+            mimetype="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
                 "X-Accel-Buffering": "no",
