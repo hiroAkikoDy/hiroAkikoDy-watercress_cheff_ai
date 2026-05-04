@@ -333,6 +333,12 @@
   const userInput = document.getElementById('user-input');
   const sendBtn = document.getElementById('send-btn');
 
+  const LOADING_MESSAGES = [
+    '🌿 Neo4jで関連レシピを検索中...',
+    '🌿 190品のデータから選んでいます...',
+    '🌿 回答を生成中...',
+  ];
+
   function addMessage(content, isUser, sources = null) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${isUser ? 'user' : 'bot'}`;
@@ -464,6 +470,14 @@
     sendBtn.disabled = true;
     // ストリーミング表示用の吹き出しを先に作る
     const botEl = addBotMessagePlaceholder();
+    let loadingStep = 0;
+    botEl.textContent = LOADING_MESSAGES[0];
+    const loadingInterval = setInterval(() => {
+      loadingStep = Math.min(loadingStep + 1, LOADING_MESSAGES.length - 1);
+      if (botEl.textContent === botEl.textContent) {
+        botEl.textContent = LOADING_MESSAGES[loadingStep];
+      }
+    }, 8000);
 
     try {
       const response = await fetch('/chat_stream', {
@@ -490,6 +504,8 @@
         return;
       }
 
+      clearInterval(loadingInterval);
+      botEl.textContent = '';
       const reader = response.body.getReader();
       const decoder = new TextDecoder('utf-8');
       while (true) {
