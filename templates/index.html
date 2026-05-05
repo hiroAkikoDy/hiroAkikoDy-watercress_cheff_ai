@@ -268,6 +268,31 @@
     background: #1e3a1c;
   }
 
+  .quick-replies {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px 16px;
+    max-width: 70%;
+  }
+
+  .quick-reply-btn {
+    background: white;
+    color: #2D5A27;
+    border: 1.5px solid #2D5A27;
+    border-radius: 20px;
+    padding: 8px 16px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+    white-space: nowrap;
+  }
+
+  .quick-reply-btn:hover {
+    background: #2D5A27;
+    color: white;
+  }
+
   /* スマートフォン対応 */
   @media (max-width: 600px) {
     .container {
@@ -337,6 +362,14 @@
     '🌿 Neo4jで関連レシピを検索中...',
     '🌿 190品のデータから選んでいます...',
     '🌿 回答を生成中...',
+  ];
+
+  const QUICK_REPLIES = [
+    "熊本のクレソン料理は？",
+    "余ったクレソンの活用法を教えて",
+    "クレソンの保存方法は？",
+    "秋向けのレシピは？",
+    "簡単な炒め物を教えて",
   ];
 
   function addMessage(content, isUser, sources = null) {
@@ -530,6 +563,40 @@
     }
   }
 
+  function showQuickReplies() {
+    const existing = document.getElementById('quick-replies-container');
+    if (existing) existing.remove();
+
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'message bot';
+    messageDiv.id = 'quick-replies-container';
+
+    const avatar = document.createElement('div');
+    avatar.className = 'avatar';
+    avatar.textContent = '🌿';
+
+    const repliesDiv = document.createElement('div');
+    repliesDiv.className = 'quick-replies';
+
+    QUICK_REPLIES.forEach(text => {
+      const btn = document.createElement('button');
+      btn.className = 'quick-reply-btn';
+      btn.textContent = text;
+      btn.onclick = () => {
+        const container = document.getElementById('quick-replies-container');
+        if (container) container.remove();
+        userInput.value = text;
+        sendMessage();
+      };
+      repliesDiv.appendChild(btn);
+    });
+
+    messageDiv.appendChild(avatar);
+    messageDiv.appendChild(repliesDiv);
+    chatArea.appendChild(messageDiv);
+    chatArea.scrollTop = chatArea.scrollHeight;
+  }
+
   sendBtn.addEventListener('click', sendMessage);
 
   // Enterキーで送信、Shift+Enterで改行
@@ -539,6 +606,9 @@
       sendMessage();
     }
   });
+
+  // 初回クイックリプライを表示
+  showQuickReplies();
 
   userInput.focus();
 </script>
