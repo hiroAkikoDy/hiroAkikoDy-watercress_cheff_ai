@@ -31,6 +31,10 @@ wheels/
 .installed.cfg
 *.egg
 
+# Alloy jar
+alloy6.jar
+*.jar
+
 # OS
 .DS_Store
 Thumbs.db
