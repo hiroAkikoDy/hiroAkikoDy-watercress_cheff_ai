@@ -66,6 +66,27 @@ INV_5: keepaliveスレッドはモジュールレベルで起動する
 INV_6: GLM-4.7のcontentが空の場合のフォールバック
         response.content or getattr(response, 'reasoning_content', None)
         このパターンで空レスポンスを回避すること。
+
+INV_7: Tool SelectorはTYPE_0・TYPE_1・TYPE_2の
+        いずれか1つに質問を分類する（排他性）
+        同時に複数のTypeに分類することはできない。
+        Alloy検証（ExclusiveClassification）で証明済み。
+        → tool_selector.als参照
+
+INV_8: TYPE_0（挨拶・定型応答）にはRAGを適用しない
+        ResponseTemplateノードからの固定文返却のみ許可する。
+        Alloy検証（NoRAGForGreeting）で証明済み。
+        GLM-4.7-Flashの呼び出しコストをゼロにすること。
+
+INV_9: キーワードが検出されない質問はTYPE_2（RAG）に落とす
+        Tool Selectorが分類不能な質問をエラーにしてはいけない。
+        Alloy検証（EmptyKeywordFallsToRAG）で証明済み。
+        フォールバック経路として現在のRAGパイプラインを維持する。
+
+INV_10: Tool Selectorのキーワード辞書はNeo4jのQueryPatternノードで管理する
+        Pythonコードにキーワードをハードコードしない。
+        キーワードの追加・変更はNeo4jへのノード追加のみで行う。
+        コードのデプロイなしにキーワード更新が可能であること。
 ```
 
 ---
@@ -180,7 +201,7 @@ langchain_study/              # 学習・実験用スクリプト（本番とは
 ```
 ✅ Phase 1:  Flask + Z.ai ローカル動作 → Renderデプロイ
 ✅ Phase 3a: Neo4j RAG + Hybrid Search → BtoC版本番公開
-🎯 Phase 3b: Tool Selector（3ツール自動選択）
+🎯 Phase 3b: Tool Selector（3ツール自動選択）← Step4 Alloy検証完了
 ⏳ Phase 4:  マルチペルソナ × 複数モデル議論AI
 ⏳ Phase 5:  半自動営業ツール化
 ```
@@ -210,9 +231,12 @@ langchain_study/              # 学習・実験用スクリプト（本番とは
 1. 日本語コメントを使う
 2. 環境変数はos.getenv()で取得する（ハードコード禁止）
 3. エラーメッセージは日本語でユーザーに表示する
-4. 作業完了後はWORK_REPORT_YYYYMMDD_HHMM.mdを作成する
+4. 作業完了後は必ず以下のパスにWORK_REPORTを作成する
+   保存先：watercress_cheff_ai/work_reports/WORK_REPORT_YYYYMMDD_HHMM.md
+   ※ work_reports/ フォルダがなければ作成すること
+   ※ 他のフォルダに作成してはいけない
 5. コミットメッセージはfix:/feat:/docs:のプレフィックスを使う
-6. INV_1〜INV_6は変更前に必ずこのファイルを確認する
+6. INV_1〜INV_10は変更前に必ずこのファイルを確認する
 ```
 
 ---
@@ -243,5 +267,5 @@ langchain_study/              # 学習・実験用スクリプト（本番とは
 
 ---
 
-*最終更新: 2026-05-03*
+*最終更新: 2026-05-05*
 *担当: 古閑弘晃（ナナカファーム）*
