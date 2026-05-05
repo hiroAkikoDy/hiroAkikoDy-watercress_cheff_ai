@@ -39,13 +39,8 @@ sig PersonaOutput {
 -- =====================
 
 -- INV_11: TYPE_3はTYPE_0・TYPE_1に分類されないものすべて
-fact TYPE3IsDefault {
-    -- TYPE_0・TYPE_1はそれぞれ排他的な集合
-    -- TYPE_3はその補集合
-    TYPE0 != TYPE1
-    TYPE0 != TYPE3
-    TYPE1 != TYPE3
-}
+-- 注: one sigは自動的に排他的なので!=比較は不要
+-- TYPE_3が残りの全質問をカバーすることはNoTYPE2 factで保証する
 
 -- INV_12: 対話は最大3往復で完了する
 fact MaxThreeTurns {
