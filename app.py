@@ -11,6 +11,10 @@ from langchain_core.runnables import RunnablePassthrough
 from langchain_neo4j import Neo4jVector
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from openai import OpenAI
+from tool_selector import (
+    load_keyword_patterns, classify,
+    get_type0_response, get_type1_response
+)
 
 # .envファイルから環境変数を読み込む（Render本番ではEnvironment Variablesを利用）
 load_dotenv()
@@ -34,6 +38,8 @@ if os.getenv("RENDER"):
 db = None
 retriever = None
 rag_chain = None
+type0_map = {}
+type1_map = {}
 LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "120"))
 LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "4096"))
 RETRIEVER_K = int(os.getenv("RETRIEVER_K", "3"))
@@ -85,7 +91,7 @@ def format_docs(docs):
 
 def initialize_rag_system():
     """アプリ起動時に1回だけ実行されるRAGシステムの初期化"""
-    global db, retriever, rag_chain
+    global db, retriever, rag_chain, type0_map, type1_map
 
     try:
         print("Neo4jに接続中...")
@@ -129,6 +135,12 @@ def initialize_rag_system():
         print("=" * 80)
         print("【Neo4j RAGシステムの初期化が完了しました】")
         print("=" * 80)
+
+        neo4j_driver = db._driver
+        db_name = os.getenv("NEO4J_USERNAME")
+        type0_map, type1_map = load_keyword_patterns(neo4j_driver, db_name)
+        print(f"✓ Tool Selector辞書読み込み完了 "
+              f"(TYPE_0: {len(type0_map)}件, TYPE_1: {len(type1_map)}件)")
 
         return True
 
@@ -292,6 +304,44 @@ def chat_stream():
             messages = messages[-10:]
 
         messages.append({"role": "user", "content": user_message})
+
+        # Tool Selectorで分類（INV_7〜INV_10）
+        tool_type = classify(user_message, type0_map, type1_map)
+        print(f"Tool Selector: {tool_type} ← 「{user_message[:20]}」")
+
+        if tool_type == "TYPE_0":
+            response_text = get_type0_response(user_message, type0_map)
+            messages.append({"role": "assistant", "content": response_text})
+            session["messages"] = messages
+            session.modified = True
+            def generate_type0():
+                yield f"data: {response_text}\n\n"
+            return Response(
+                generate_type0(),
+                mimetype="text/event-stream",
+                headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+            )
+
+        if tool_type == "TYPE_1":
+            neo4j_driver = db._driver
+            db_name = os.getenv("NEO4J_USERNAME")
+            type1_response = get_type1_response(
+                user_message, type1_map, neo4j_driver, db_name
+            )
+            if type1_response:
+                messages.append({"role": "assistant", "content": type1_response})
+                session["messages"] = messages
+                session.modified = True
+                def generate_type1():
+                    for char in type1_response:
+                        yield f"data: {char}\n\n"
+                return Response(
+                    generate_type1(),
+                    mimetype="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+                )
+
+        # TYPE_2: 既存のRAGパイプラインをそのまま使用
 
         # RAG検索は先に確定させ、プロンプトに埋め込んでストリーミング生成する
         try:
