@@ -7,4 +7,5 @@ langchain-openai
 langchain-core
 spacy>=3.7
 neo4j>=5.0
+ja_core_news_sm @ https://github.com/explosion/spacy-models/releases/download/ja_core_news_sm-3.8.0/ja_core_news_sm-3.8.0-py3-none-any.whl
 

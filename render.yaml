@@ -3,7 +3,7 @@ services:
     name: watercress-cheff-ai
     env: python
     plan: free
-    buildCommand: pip install -r requirements.txt && python -m spacy download ja_core_news_sm
+    buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --worker-class gthread --threads 4 --timeout 120
     autoDeploy: true
     envVars:
