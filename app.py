@@ -1,7 +1,9 @@
+import json
 import os
 import sys
 import time
 import threading
+import uuid
 
 from dotenv import load_dotenv
 from flask import Flask, Response, jsonify, render_template, request, session, stream_with_context
@@ -45,6 +47,7 @@ retriever = None
 rag_chain = None
 type0_map = {}
 type1_map = {}
+report_cache = {}
 LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "120"))
 LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "4096"))
 RETRIEVER_K = int(os.getenv("RETRIEVER_K", "3"))
@@ -168,6 +171,7 @@ def ensure_rag_system_initialized():
 @app.route("/")
 def index():
     session.clear()
+    session["session_id"] = str(uuid.uuid4())
     session["messages"] = []
     if not ensure_rag_system_initialized():
         return (
@@ -310,13 +314,9 @@ def chat_stream():
 
         messages.append({"role": "user", "content": user_message})
 
-        # 対話セッション中はTool Selectorをスキップ（INV_11）
-        dialog_turn = session.get("dialog_turn", 0)
-        if dialog_turn > 0:
-            tool_type = "TYPE_3"
-        else:
-            tool_type = classify(user_message, type0_map, type1_map)
-            print(f"Tool Selector: {tool_type} ← 「{user_message[:20]}」")
+        # Tool Selectorで分類（INV_7〜INV_10）
+        tool_type = classify(user_message, type0_map, type1_map)
+        print(f"Tool Selector: {tool_type} ← 「{user_message[:20]}」")
 
         if tool_type == "TYPE_0":
             response_text = get_type0_response(user_message, type0_map)
@@ -387,7 +387,7 @@ def chat_stream():
             rag_query = build_rag_query(dialog_conditions)
             print(f"TYPE_3 RAG検索クエリ: {rag_query}")
 
-            session["dialog_conditions"] = {}
+            session["dialog_conditions"] = dialog_conditions
             session["dialog_turn"] = 0
             session.modified = True
 
@@ -398,32 +398,17 @@ def chat_stream():
                 print(f"TYPE_3 RAG検索エラー: {e}")
                 rag_context = "（データ取得に失敗しました）"
 
-            persona_messages = messages
+            conditions_json = json.dumps(
+                {"rag_context": rag_context, "conditions": dialog_conditions},
+                ensure_ascii=False
+            )
 
-            @stream_with_context
-            def generate_persona():
-                full_text = []
-                try:
-                    for chunk in generate_multi_persona_report(
-                        rag_context, dialog_conditions
-                    ):
-                        token = chunk.replace("data: ", "").replace("\n\n", "")
-                        full_text.append(token)
-                        yield chunk
-                except Exception as e:
-                    print(f"マルチペルソナエラー: {str(e)}")
-                    yield f"data: \n[エラー: {str(e)[:50]}]\n\n"
-                finally:
-                    answer = "".join(full_text).strip()
-                    if answer:
-                        persona_messages.append(
-                            {"role": "assistant", "content": answer}
-                        )
-                        session["messages"] = persona_messages
-                        session.modified = True
+            def generate_report_start():
+                yield "data: __START_REPORT__\n\n"
+                yield f"data: {conditions_json}\n\n"
 
             return Response(
-                generate_persona(),
+                generate_report_start(),
                 mimetype="text/event-stream",
                 headers={
                     "Cache-Control": "no-cache",
@@ -438,6 +423,114 @@ def chat_stream():
 
         print(f"Traceback: {traceback.format_exc()}")
         return jsonify({"error": error_message}), 500
+
+
+@app.route("/start_report", methods=["POST"])
+def start_report():
+    """
+    非同期レポート生成を開始する（INV_15）
+    即座にgeneratingを返し、バックグラウンドでレポートを生成する
+    """
+    data = request.json or {}
+    rag_context = data.get("rag_context", "")
+    conditions = data.get("conditions", {})
+    sid = session.get("session_id", str(uuid.uuid4()))
+
+    def generate_in_background():
+        try:
+            report_cache[sid] = {"status": "generating", "report": ""}
+            full_text = []
+            for chunk in generate_multi_persona_report(rag_context, conditions):
+                token = chunk.replace("data: ", "").replace("\n\n", "")
+                full_text.append(token)
+            report = "".join(full_text).strip()
+            report_cache[sid] = {"status": "done", "report": report}
+            print(f"レポート生成完了: session_id={sid[:8]}...")
+        except Exception as e:
+            report_cache[sid] = {"status": "failed", "report": str(e)}
+            print(f"レポート生成失敗: {e}")
+
+    thread = threading.Thread(target=generate_in_background, daemon=True)
+    thread.start()
+
+    return jsonify({"status": "generating", "session_id": sid})
+
+
+@app.route("/report_status", methods=["GET"])
+def report_status():
+    """
+    レポートの生成状態を返す（INV_15・INV_18）
+    フロントエンドが5秒ごとにポーリングする
+    """
+    sid = session.get("session_id", "")
+    cache_entry = report_cache.get(sid, {})
+    status = cache_entry.get("status", "not_found")
+    report = cache_entry.get("report", "")
+
+    if status == "done":
+        del report_cache[sid]
+
+    return jsonify({"status": status, "report": report})
+
+
+@app.route("/interviewer", methods=["POST"])
+def interviewer_endpoint():
+    """
+    インタビュアーAIエンドポイント（INV_17）
+    レポート生成中のみ動作し、最大2問の追加質問を行う
+    """
+    from interviewer_engine import (
+        INTERVIEW_QUESTIONS,
+        get_next_interview_question,
+        generate_interviewer_response,
+    )
+
+    data = request.json or {}
+    user_answer = data.get("answer", "").strip()
+    last_question_id = data.get("last_question_id", "")
+
+    interview_conditions = session.get("interview_conditions", {})
+    base_conditions = session.get("dialog_conditions", {})
+
+    if user_answer and last_question_id:
+        for q in INTERVIEW_QUESTIONS:
+            if q["id"] == last_question_id:
+                interview_conditions[q["condition_key"]] = user_answer
+                break
+
+    session["interview_conditions"] = interview_conditions
+    session.modified = True
+
+    sid = session.get("session_id", "")
+    cache_entry = report_cache.get(sid, {})
+    is_generating = cache_entry.get("status") == "generating"
+
+    if not is_generating:
+        return jsonify({
+            "status": "report_done",
+            "message": "レポートが完成しました！"
+        })
+
+    next_q = get_next_interview_question(interview_conditions)
+
+    if not next_q:
+        return jsonify({
+            "status": "interview_done",
+            "message": "ありがとうございます🌿レポートの準備ができたらお知らせします！"
+        })
+
+    bridge = ""
+    if user_answer and last_question_id:
+        bridge = generate_interviewer_response(
+            last_question_id, user_answer, interview_conditions
+        )
+
+    return jsonify({
+        "status": "interviewing",
+        "bridge": bridge,
+        "next_question": next_q["question"],
+        "next_question_id": next_q["id"],
+    })
 
 
 @app.route("/reset", methods=["POST"])

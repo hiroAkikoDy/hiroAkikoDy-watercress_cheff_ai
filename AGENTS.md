@@ -100,11 +100,10 @@ INV_12: TYPE_3の対話は基本2往復・最大3往復で完了する
         ユーザーを待たせない設計を優先する。
         Alloy検証（ForceCompleteWorks）で証明済み。
 
-INV_13: マルチペルソナはChef→Nutritionistの順で
+INV_13: マルチペルソナはMC→Chef→Nutritionist→MCの順で
         チャット画面内にストリーミング出力する。
-        Chefは200字以内・Nutritionistは100字以内を目安にする。
-        Alloy検証（ExpertsInMiddle）で証明済み。
-        MC司会ペルソナはPhase 4b（非同期レポート実装時）で追加予定。
+        各ペルソナの発言は300字以内を目安にする。
+        Alloy検証（MCLeadsAndCloses・ExpertsInMiddle）で証明済み。
 
 INV_14: TYPE_2は廃止しTYPE_3に統合する
         従来のRAG Hybrid SearchはTYPE_3の
@@ -224,8 +223,7 @@ langchain_study/              # 学習・実験用スクリプト（本番とは
 ✅ Phase 1:  Flask + Z.ai ローカル動作 → Renderデプロイ
 ✅ Phase 3a: Neo4j RAG + Hybrid Search → BtoC版本番公開
 ✅ Phase 3b: Tool Selector（3ツール自動選択）← 本番稼働中
-✅ Phase 4:  マルチペルソナ × 対話型絞り込み ← 本番稼働中
-🎯 Phase 4b: 非同期レポート + インタビュアーAI
+🎯 Phase 4:  マルチペルソナ × 対話型絞り込み ← Step4 Alloy検証完了
 ⏳ Phase 5:  半自動営業ツール化
 ```
 

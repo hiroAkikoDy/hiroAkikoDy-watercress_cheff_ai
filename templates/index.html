@@ -372,6 +372,9 @@
     "簡単な炒め物を教えて",
   ];
 
+  let reportPollInterval = null;
+  let currentQuestionId = null;
+
   function addMessage(content, isUser, sources = null) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${isUser ? 'user' : 'bot'}`;
@@ -498,6 +501,13 @@
     const message = userInput.value.trim();
     if (!message) return;
 
+    if (currentQuestionId) {
+      addMessage(message, true);
+      userInput.value = '';
+      sendInterviewAnswer(message);
+      return;
+    }
+
     addMessage(message, true);
     userInput.value = '';
     sendBtn.disabled = true;
@@ -541,6 +551,8 @@
       botEl.textContent = '';
       const reader = response.body.getReader();
       const decoder = new TextDecoder('utf-8');
+      let reportStarted = false;
+      let reportPayload = '';
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
@@ -549,10 +561,27 @@
         for (const line of lines) {
           if (line.startsWith('data: ')) {
             const token = line.slice(6).trim();
+            if (token === '__START_REPORT__') {
+              reportStarted = true;
+              botEl.innerHTML = '📋 レポートを生成中です...<br><span style="color:#666;font-size:13px;">（インタビューに答えると精度が上がります）</span>';
+              continue;
+            }
+            if (reportStarted) {
+              reportPayload += token;
+              continue;
+            }
             if (token && token !== '[DONE]') {
               appendBotDelta(botEl, token);
             }
           }
+        }
+      }
+      if (reportStarted && reportPayload) {
+        try {
+          const reportData = JSON.parse(reportPayload);
+          startReportAsync(reportData.rag_context, reportData.conditions);
+        } catch(e) {
+          console.error('レポートデータパースエラー:', e);
         }
       }
     } catch (error) {
@@ -611,6 +640,108 @@
   showQuickReplies();
 
   userInput.focus();
+
+  async function startReportAsync(ragContext, conditions) {
+    try {
+      await fetch('/start_report', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          rag_context: ragContext,
+          conditions: conditions
+        })
+      });
+
+      reportPollInterval = setInterval(checkReportStatus, 5000);
+
+      startInterview();
+
+    } catch (e) {
+      console.error('レポート開始エラー:', e);
+    }
+  }
+
+  async function checkReportStatus() {
+    try {
+      const res = await fetch('/report_status');
+      const data = await res.json();
+
+      if (data.status === 'done') {
+        clearInterval(reportPollInterval);
+        reportPollInterval = null;
+        currentQuestionId = null;
+
+        const reportDiv = document.createElement('div');
+        reportDiv.className = 'message bot';
+        const avatar = document.createElement('div');
+        avatar.className = 'avatar';
+        avatar.textContent = '🌿';
+        const content = document.createElement('div');
+        content.className = 'message-content';
+        content.innerHTML = '📋 <strong>レポートが完成しました！</strong><br><br>' +
+          (data.report || '').replace(/\n/g, '<br>');
+        reportDiv.appendChild(avatar);
+        reportDiv.appendChild(content);
+        chatArea.appendChild(reportDiv);
+        chatArea.scrollTop = chatArea.scrollHeight;
+
+      } else if (data.status === 'failed') {
+        clearInterval(reportPollInterval);
+        reportPollInterval = null;
+        addMessage('レポート生成に失敗しました。もう一度お試しください。', false);
+      }
+    } catch (e) {
+      console.error('ポーリングエラー:', e);
+    }
+  }
+
+  async function startInterview() {
+    try {
+      const res = await fetch('/interviewer', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({answer: '', last_question_id: ''})
+      });
+      const data = await res.json();
+
+      if (data.status === 'interviewing') {
+        currentQuestionId = data.next_question_id;
+        addMessage('🎤 ' + data.next_question, false);
+      }
+    } catch (e) {
+      console.error('インタビュー開始エラー:', e);
+    }
+  }
+
+  async function sendInterviewAnswer(answer) {
+    if (!currentQuestionId) return false;
+
+    try {
+      const res = await fetch('/interviewer', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          answer: answer,
+          last_question_id: currentQuestionId
+        })
+      });
+      const data = await res.json();
+
+      if (data.status === 'interviewing') {
+        currentQuestionId = data.next_question_id;
+        if (data.bridge) addMessage(data.bridge, false);
+        addMessage('🎤 ' + data.next_question, false);
+        return true;
+      } else {
+        currentQuestionId = null;
+        if (data.message) addMessage(data.message, false);
+        return false;
+      }
+    } catch (e) {
+      console.error('インタビュー回答エラー:', e);
+      return false;
+    }
+  }
 </script>
 
 </body>
