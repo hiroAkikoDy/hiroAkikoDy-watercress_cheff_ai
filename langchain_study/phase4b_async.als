@@ -19,7 +19,8 @@ sig ReportCache {
     entries: Session -> lone ReportState
 } {
     all s1, s2: Session |
-        s1.session_id = s2.session_id implies s1 = s2
+        s1.session_id = s2.session_id and
+        (s1 + s2) in entries.ReportState implies s1 = s2
 }
 
 -- インタビュー
