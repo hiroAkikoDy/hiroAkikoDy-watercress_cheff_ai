@@ -8,12 +8,11 @@ import os
 import time
 from openai import OpenAI
 
-zai_client = OpenAI(
-    api_key=os.getenv("ZAI_API_KEY"),
-    base_url="https://api.z.ai/api/paas/v4/",
+persona_client = OpenAI(
+    api_key=os.getenv("OPENAI_API_KEY"),
     timeout=120,
 )
-MODEL_NAME = os.getenv("LLM_MODEL", "GLM-4.7-Flash")
+PERSONA_MODEL = "gpt-4o-mini"
 
 PERSONAS = [
     {
@@ -42,8 +41,8 @@ def generate_persona_stream(persona: dict, context: str):
     max_retries = 3
     for attempt in range(max_retries):
         try:
-            stream = zai_client.chat.completions.create(
-                model=MODEL_NAME,
+            stream = persona_client.chat.completions.create(
+                model=PERSONA_MODEL,
                 messages=[
                     {"role": "system", "content": persona["system"]},
                     {"role": "user", "content": context},
