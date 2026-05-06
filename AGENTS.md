@@ -108,6 +108,30 @@ INV_13: マルチペルソナはMC→Chef→Nutritionist→MCの順で
 INV_14: TYPE_2は廃止しTYPE_3に統合する
         従来のRAG Hybrid SearchはTYPE_3の
         条件収集完了後の内部処理として継続使用する。
+
+INV_15: レポート生成は非同期で実行する
+         /start_reportは即座に{"status":"generating"}を返す。
+         生成完了はreport_cacheにsession_idをキーとして保存する。
+         ユーザーをレポート完了まで待機させない。
+         Alloy検証（ReportEventuallyDone）で証明済み。
+         → phase4b_async.als参照
+
+INV_16: レポートはTTFB要件の対象外とする
+         最大90秒を許容する。生成中であることをUIで明示する。
+         Alloy検証（ReportEventuallyDone）で証明済み。
+
+INV_17: インタビュアーAIはレポート生成中のみ動作する
+         最大2問の追加質問を行う。
+         質問テーマ優先順位：
+           1位: アレルギー・苦手食材（安全性）
+           2位: 調理時間 or 冷蔵庫食材（実用性）
+         レポート完成後は通常のTool Selector経路に戻る。
+         Alloy検証（InterviewMaxTwoQuestions・InterviewStopsAfterDone）で証明済み。
+
+INV_18: report_cacheはsession_idをキーとして一意に管理する
+         Flaskのsession["session_id"]で識別する。
+         セッションリセット時にreport_cacheのエントリも削除する。
+         Alloy検証（CacheSessionIdUnique）で証明済み。
 ```
 
 ---
@@ -223,7 +247,8 @@ langchain_study/              # 学習・実験用スクリプト（本番とは
 ✅ Phase 1:  Flask + Z.ai ローカル動作 → Renderデプロイ
 ✅ Phase 3a: Neo4j RAG + Hybrid Search → BtoC版本番公開
 ✅ Phase 3b: Tool Selector（3ツール自動選択）← 本番稼働中
-🎯 Phase 4:  マルチペルソナ × 対話型絞り込み ← Step4 Alloy検証完了
+✅ Phase 4:  マルチペルソナ × 対話型絞り込み ← 本番稼働中
+🎯 Phase 4b: 非同期レポート + インタビュアーAI ← Step4 Alloy検証完了
 ⏳ Phase 5:  半自動営業ツール化
 ```
 
@@ -254,7 +279,7 @@ langchain_study/              # 学習・実験用スクリプト（本番とは
 3. エラーメッセージは日本語でユーザーに表示する
 4. 作業完了後はWORK_REPORT_YYYYMMDD_HHMM.mdを作成する
 5. コミットメッセージはfix:/feat:/docs:のプレフィックスを使う
-6. INV_1〜INV_14は変更前に必ずこのファイルを確認する
+6. INV_1〜INV_18は変更前に必ずこのファイルを確認する
 ```
 
 ---
