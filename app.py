@@ -15,6 +15,11 @@ from tool_selector import (
     load_keyword_patterns, classify,
     get_type0_response, get_type1_response
 )
+from dialog_engine import (
+    get_next_question, extract_condition,
+    build_rag_query, get_current_question_key, is_complete
+)
+from persona_engine import generate_multi_persona_report
 
 # .envファイルから環境変数を読み込む（Render本番ではEnvironment Variablesを利用）
 load_dotenv()
@@ -341,71 +346,77 @@ def chat_stream():
                     headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
                 )
 
-        # TYPE_2: 既存のRAGパイプラインをそのまま使用
+        # TYPE_3: 対話型絞り込み（INV_11〜INV_14）
+        if tool_type not in ("TYPE_0", "TYPE_1"):
+            dialog_conditions = session.get("dialog_conditions", {})
+            dialog_turn = session.get("dialog_turn", 0)
 
-        # RAG検索は先に確定させ、プロンプトに埋め込んでストリーミング生成する
-        try:
-            source_docs = retriever.invoke(user_message)
-            context_text = format_docs(source_docs)
-        except Exception as neo4j_err:
-            print(f"Neo4j検索エラー、再接続を試みます: {neo4j_err}")
-            if initialize_rag_system():
-                try:
-                    source_docs = retriever.invoke(user_message)
-                    context_text = format_docs(source_docs)
-                except Exception:
-                    context_text = "（データ取得に失敗しました）"
-                    source_docs = []
-            else:
-                context_text = "（データベース接続に失敗しました）"
-                source_docs = []
-        prompt_text = SYSTEM_PROMPT_TEMPLATE.format(context=context_text, question=user_message)
-
-        @stream_with_context
-        def generate():
-            full_text_parts = []
-            t0 = time.time()
-            first_chunk_time = None
-            try:
-                stream = zai_client.chat.completions.create(
-                    model=MODEL_NAME,
-                    messages=[{"role": "user", "content": prompt_text}],
-                    stream=True,
-                    temperature=0.7,
-                    max_tokens=LLM_MAX_TOKENS,
+            current_key = get_current_question_key(dialog_conditions)
+            if current_key and dialog_turn > 0:
+                dialog_conditions[current_key] = extract_condition(
+                    current_key, user_message
                 )
-                for event in stream:
-                    if not event or not getattr(event, "choices", None):
-                        continue
-                    choice0 = event.choices[0]
-                    delta = getattr(choice0, "delta", None)
-                    token = getattr(delta, "content", None) if delta else None
-                    if not token:
-                        continue
-                    if first_chunk_time is None:
-                        first_chunk_time = time.time() - t0
-                        print(f"TTFB（最初のチャンク）: {first_chunk_time:.2f}s")
-                    full_text_parts.append(token)
-                    yield f"data: {token}\n\n"
+
+            dialog_turn += 1
+            session["dialog_conditions"] = dialog_conditions
+            session["dialog_turn"] = dialog_turn
+            session.modified = True
+
+            if not is_complete(dialog_conditions, dialog_turn):
+                next_q = get_next_question(dialog_conditions)
+                messages.append({"role": "assistant", "content": next_q})
+                session["messages"] = messages
+                session.modified = True
+
+                def generate_question():
+                    yield f"data: {next_q}\n\n"
+
+                return Response(
+                    generate_question(),
+                    mimetype="text/event-stream",
+                    headers={
+                        "Cache-Control": "no-cache",
+                        "X-Accel-Buffering": "no",
+                    },
+                )
+
+            rag_query = build_rag_query(dialog_conditions)
+            print(f"TYPE_3 RAG検索クエリ: {rag_query}")
+
+            session["dialog_conditions"] = {}
+            session["dialog_turn"] = 0
+            session.modified = True
+
+            try:
+                source_docs = retriever.invoke(rag_query)
+                rag_context = format_docs(source_docs)
             except Exception as e:
-                yield f"\n[ERROR] {str(e)}"
-            finally:
-                answer = "".join(full_text_parts).strip()
+                print(f"TYPE_3 RAG検索エラー: {e}")
+                rag_context = "（データ取得に失敗しました）"
+
+            def generate_persona():
+                full_text = []
+                for chunk in generate_multi_persona_report(
+                    rag_context, dialog_conditions
+                ):
+                    full_text.append(
+                        chunk.replace("data: ", "").replace("\n\n", "")
+                    )
+                    yield chunk
+                answer = "".join(full_text).strip()
                 if answer:
                     messages.append({"role": "assistant", "content": answer})
                     session["messages"] = messages
                     session.modified = True
-                total = time.time() - t0
-                print(f"LLM完了: {total:.2f}s")
 
-        return Response(
-            generate(),
-            mimetype="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "X-Accel-Buffering": "no",
-            },
-        )
+            return Response(
+                generate_persona(),
+                mimetype="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "X-Accel-Buffering": "no",
+                },
+            )
 
     except Exception as e:
         error_message = f"エラーが発生しました: {str(e)}"

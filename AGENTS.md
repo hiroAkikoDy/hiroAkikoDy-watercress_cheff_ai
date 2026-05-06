@@ -67,7 +67,7 @@ INV_6: GLM-4.7のcontentが空の場合のフォールバック
         response.content or getattr(response, 'reasoning_content', None)
         このパターンで空レスポンスを回避すること。
 
-INV_7: Tool SelectorはTYPE_0・TYPE_1・TYPE_2の
+INV_7: Tool SelectorはTYPE_0・TYPE_1・TYPE_3の
         いずれか1つに質問を分類する（排他性）
         同時に複数のTypeに分類することはできない。
         Alloy検証（ExclusiveClassification）で証明済み。
@@ -78,15 +78,36 @@ INV_8: TYPE_0（挨拶・定型応答）にはRAGを適用しない
         Alloy検証（NoRAGForGreeting）で証明済み。
         GLM-4.7-Flashの呼び出しコストをゼロにすること。
 
-INV_9: キーワードが検出されない質問はTYPE_2（RAG）に落とす
+INV_9: キーワードが検出されない質問はTYPE_3（対話）に落とす
         Tool Selectorが分類不能な質問をエラーにしてはいけない。
         Alloy検証（EmptyKeywordFallsToRAG）で証明済み。
-        フォールバック経路として現在のRAGパイプラインを維持する。
+        フォールバック経路としてTYPE_3パイプラインを維持する。
 
 INV_10: Tool Selectorのキーワード辞書はNeo4jのQueryPatternノードで管理する
         Pythonコードにキーワードをハードコードしない。
         キーワードの追加・変更はNeo4jへのノード追加のみで行う。
         コードのデプロイなしにキーワード更新が可能であること。
+
+INV_11: TYPE_3はTYPE_0・TYPE_1に分類されない全ての質問を受け持つ
+        TYPE_0・TYPE_1に確実に当てはまらないものは全てTYPE_3へ。
+        「分類できない」をエラーにしない。エキスパートシステム化を避ける。
+        Alloy検証（NoInfiniteDialog）で証明済み。
+        → phase4_dialog.als参照
+
+INV_12: TYPE_3の対話は基本2往復・最大3往復で完了する
+        3往復目終了時点で条件が不足していても
+        RAG検索＋マルチペルソナレポートを強制出力する。
+        ユーザーを待たせない設計を優先する。
+        Alloy検証（ForceCompleteWorks）で証明済み。
+
+INV_13: マルチペルソナはMC→Chef→Nutritionist→MCの順で
+        チャット画面内にストリーミング出力する。
+        各ペルソナの発言は300字以内を目安にする。
+        Alloy検証（MCLeadsAndCloses・ExpertsInMiddle）で証明済み。
+
+INV_14: TYPE_2は廃止しTYPE_3に統合する
+        従来のRAG Hybrid SearchはTYPE_3の
+        条件収集完了後の内部処理として継続使用する。
 ```
 
 ---
@@ -201,8 +222,8 @@ langchain_study/              # 学習・実験用スクリプト（本番とは
 ```
 ✅ Phase 1:  Flask + Z.ai ローカル動作 → Renderデプロイ
 ✅ Phase 3a: Neo4j RAG + Hybrid Search → BtoC版本番公開
-🎯 Phase 3b: Tool Selector（3ツール自動選択）← Step4 Alloy検証完了
-⏳ Phase 4:  マルチペルソナ × 複数モデル議論AI
+✅ Phase 3b: Tool Selector（3ツール自動選択）← 本番稼働中
+🎯 Phase 4:  マルチペルソナ × 対話型絞り込み ← Step4 Alloy検証完了
 ⏳ Phase 5:  半自動営業ツール化
 ```
 
@@ -231,12 +252,9 @@ langchain_study/              # 学習・実験用スクリプト（本番とは
 1. 日本語コメントを使う
 2. 環境変数はos.getenv()で取得する（ハードコード禁止）
 3. エラーメッセージは日本語でユーザーに表示する
-4. 作業完了後は必ず以下のパスにWORK_REPORTを作成する
-   保存先：watercress_cheff_ai/work_reports/WORK_REPORT_YYYYMMDD_HHMM.md
-   ※ work_reports/ フォルダがなければ作成すること
-   ※ 他のフォルダに作成してはいけない
+4. 作業完了後はWORK_REPORT_YYYYMMDD_HHMM.mdを作成する
 5. コミットメッセージはfix:/feat:/docs:のプレフィックスを使う
-6. INV_1〜INV_10は変更前に必ずこのファイルを確認する
+6. INV_1〜INV_14は変更前に必ずこのファイルを確認する
 ```
 
 ---
@@ -267,5 +285,5 @@ langchain_study/              # 学習・実験用スクリプト（本番とは
 
 ---
 
-*最終更新: 2026-05-05*
+*最終更新: 2026-05-06*
 *担当: 古閑弘晃（ナナカファーム）*
