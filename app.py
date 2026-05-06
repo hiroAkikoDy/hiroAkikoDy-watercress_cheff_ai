@@ -411,7 +411,8 @@ def chat_stream():
                         full_text.append(token)
                         yield chunk
                 except Exception as e:
-                    yield f"data: \n[エラーが発生しました: {str(e)}]\n\n"
+                    print(f"マルチペルソナエラー: {str(e)}")
+                    yield f"data: \n[エラー: {str(e)[:50]}]\n\n"
                 finally:
                     answer = "".join(full_text).strip()
                     if answer:

@@ -1,7 +1,7 @@
 """
 Phase 4 マルチペルソナエンジン（INV_13）
-発言順序: 司会(MC) → シェフ(Chef) → 栄養士(Nutritionist) → 司会(MC)
-各ペルソナ300字以内・チャット画面内にストリーミング出力
+発言順序: シェフ(Chef) → 栄養士(Nutritionist)
+各ペルソナ指定字数以内・チャット画面内にストリーミング出力
 """
 
 import os
@@ -17,39 +17,22 @@ MODEL_NAME = os.getenv("LLM_MODEL", "GLM-4.7-Flash")
 
 PERSONAS = [
     {
-        "id": "mc_intro",
-        "name": "🎙️ 司会",
-        "system": """あなたはナナカファームのクレソン料理AIの司会者です。
-ユーザーの条件に合った料理を1品選び、
-「〇〇をおすすめします！専門家の意見も聞いてみましょう。」
-という形で100字以内で紹介してください。""",
-    },
-    {
         "id": "chef",
-        "name": "👨‍🍳 シェフ",
+        "name": "👨‍🍳 シェフからのアドバイス",
         "system": """あなたはプロのシェフです。
-司会が紹介した料理について、
-調理技術・下処理・火加減・味付けのポイントを
-300字以内でアドバイスしてください。
-家庭で作れるレベルで説明してください。""",
+ユーザーの条件に合ったクレソン料理を1品選び、
+料理名・材料・作り方・調理のポイントを
+200字以内で具体的に説明してください。
+家庭で作れるレベルで、明るく親しみやすいトーンで。""",
     },
     {
         "id": "nutritionist",
-        "name": "🥗 栄養士",
+        "name": "🥗 栄養士からのひとこと",
         "system": """あなたは管理栄養士です。
-司会が紹介した料理について、
-栄養価・健康メリット・食べ合わせのポイントを
-300字以内でアドバイスしてください。
-クレソンの栄養素（ビタミンC・K・鉄分）に触れてください。""",
-    },
-    {
-        "id": "mc_close",
-        "name": "🎙️ 司会（まとめ）",
-        "system": """あなたはナナカファームのクレソン料理AIの司会者です。
-シェフと栄養士のアドバイスを踏まえて、
-「今夜はぜひ〇〇を試してみてください！」
-という形で100字以内でまとめてください。
-明るく背中を押すようなトーンで。""",
+シェフが紹介した料理について、
+クレソンの栄養価（ビタミンC・K・鉄分）と
+健康メリットを100字以内で一言添えてください。
+簡潔に、ポジティブなトーンで。""",
     },
 ]
 
@@ -83,12 +66,13 @@ def generate_persona_stream(persona: dict, context: str):
                 print(f"ペルソナ生成リトライ {attempt+1}/{max_retries}: {e}")
                 time.sleep(wait)
             else:
-                yield f"（{persona['name']}のコメントを取得できませんでした）"
+                yield f"（コメントの取得に失敗しました。もう一度お試しください）"
+                print(f"ペルソナ生成失敗: {persona['id']} - 最大リトライ到達")
 
 
 def generate_multi_persona_report(rag_context: str, conditions: dict):
     """
-    INV_13: MC→Chef→Nutritionist→MCの順でストリーミング出力する
+    INV_13: Chef→Nutritionistの順でストリーミング出力する
     各ペルソナの発言をSSE形式で逐次yieldする
     """
     condition_text = ""
@@ -106,6 +90,11 @@ def generate_multi_persona_report(rag_context: str, conditions: dict):
 {rag_context}
 """
 
+    # レポート作成中メッセージを最初に送信
+    yield "data: 🌿 **レポートを作成中です...少々お待ちください**\n\n"
+    yield "data: \n\n"
+    time.sleep(1)
+
     for i, persona in enumerate(PERSONAS):
         header = f"\n\n**{persona['name']}**\n"
         yield f"data: {header}\n\n"
@@ -114,4 +103,4 @@ def generate_multi_persona_report(rag_context: str, conditions: dict):
             yield f"data: {token}\n\n"
 
         if i < len(PERSONAS) - 1:
-            time.sleep(3)
+            time.sleep(5)
