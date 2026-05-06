@@ -17,6 +17,9 @@ sig Session {
 -- report_cache（session_idをキーとして管理）
 sig ReportCache {
     entries: Session -> lone ReportState
+} {
+    all s1, s2: Session |
+        s1.session_id = s2.session_id implies s1 = s2
 }
 
 -- インタビュー
@@ -63,12 +66,7 @@ fact MaxTwoQuestions {
         i.question_count >= 0 and i.question_count <= 2
 }
 
--- INV_18: report_cacheはsession_idで一意に管理する
-fact CacheUniqueBySession {
-    all c: ReportCache |
-        all s1, s2: Session |
-            s1.session_id = s2.session_id implies s1 = s2
-}
+-- INV_18: report_cacheはsession_idで一意に管理する（sig内で定義済み）
 
 -- =====================
 -- 検証アサーション
