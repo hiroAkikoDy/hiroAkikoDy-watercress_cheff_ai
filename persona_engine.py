@@ -5,6 +5,7 @@ Phase 4 マルチペルソナエンジン（INV_13）
 """
 
 import os
+import time
 from openai import OpenAI
 
 zai_client = OpenAI(
@@ -55,23 +56,34 @@ PERSONAS = [
 
 def generate_persona_stream(persona: dict, context: str):
     """1つのペルソナのストリーミング発言を生成するジェネレータ"""
-    stream = zai_client.chat.completions.create(
-        model=MODEL_NAME,
-        messages=[
-            {"role": "system", "content": persona["system"]},
-            {"role": "user", "content": context},
-        ],
-        stream=True,
-        temperature=0.7,
-        max_tokens=400,
-    )
-    for event in stream:
-        if not event or not getattr(event, "choices", None):
-            continue
-        delta = getattr(event.choices[0], "delta", None)
-        token = getattr(delta, "content", None) if delta else None
-        if token:
-            yield token
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            stream = zai_client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=[
+                    {"role": "system", "content": persona["system"]},
+                    {"role": "user", "content": context},
+                ],
+                stream=True,
+                temperature=0.7,
+                max_tokens=400,
+            )
+            for event in stream:
+                if not event or not getattr(event, "choices", None):
+                    continue
+                delta = getattr(event.choices[0], "delta", None)
+                token = getattr(delta, "content", None) if delta else None
+                if token:
+                    yield token
+            return
+        except Exception as e:
+            if attempt < max_retries - 1:
+                wait = 2 ** attempt * 3
+                print(f"ペルソナ生成リトライ {attempt+1}/{max_retries}: {e}")
+                time.sleep(wait)
+            else:
+                yield f"（{persona['name']}のコメントを取得できませんでした）"
 
 
 def generate_multi_persona_report(rag_context: str, conditions: dict):
@@ -94,9 +106,12 @@ def generate_multi_persona_report(rag_context: str, conditions: dict):
 {rag_context}
 """
 
-    for persona in PERSONAS:
+    for i, persona in enumerate(PERSONAS):
         header = f"\n\n**{persona['name']}**\n"
         yield f"data: {header}\n\n"
 
         for token in generate_persona_stream(persona, context):
             yield f"data: {token}\n\n"
+
+        if i < len(PERSONAS) - 1:
+            time.sleep(3)

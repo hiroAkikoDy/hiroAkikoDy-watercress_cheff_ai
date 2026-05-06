@@ -310,9 +310,13 @@ def chat_stream():
 
         messages.append({"role": "user", "content": user_message})
 
-        # Tool Selectorで分類（INV_7〜INV_10）
-        tool_type = classify(user_message, type0_map, type1_map)
-        print(f"Tool Selector: {tool_type} ← 「{user_message[:20]}」")
+        # 対話セッション中はTool Selectorをスキップ（INV_11）
+        dialog_turn = session.get("dialog_turn", 0)
+        if dialog_turn > 0:
+            tool_type = "TYPE_3"
+        else:
+            tool_type = classify(user_message, type0_map, type1_map)
+            print(f"Tool Selector: {tool_type} ← 「{user_message[:20]}」")
 
         if tool_type == "TYPE_0":
             response_text = get_type0_response(user_message, type0_map)
@@ -394,20 +398,28 @@ def chat_stream():
                 print(f"TYPE_3 RAG検索エラー: {e}")
                 rag_context = "（データ取得に失敗しました）"
 
+            persona_messages = messages
+
+            @stream_with_context
             def generate_persona():
                 full_text = []
-                for chunk in generate_multi_persona_report(
-                    rag_context, dialog_conditions
-                ):
-                    full_text.append(
-                        chunk.replace("data: ", "").replace("\n\n", "")
-                    )
-                    yield chunk
-                answer = "".join(full_text).strip()
-                if answer:
-                    messages.append({"role": "assistant", "content": answer})
-                    session["messages"] = messages
-                    session.modified = True
+                try:
+                    for chunk in generate_multi_persona_report(
+                        rag_context, dialog_conditions
+                    ):
+                        token = chunk.replace("data: ", "").replace("\n\n", "")
+                        full_text.append(token)
+                        yield chunk
+                except Exception as e:
+                    yield f"data: \n[エラーが発生しました: {str(e)}]\n\n"
+                finally:
+                    answer = "".join(full_text).strip()
+                    if answer:
+                        persona_messages.append(
+                            {"role": "assistant", "content": answer}
+                        )
+                        session["messages"] = persona_messages
+                        session.modified = True
 
             return Response(
                 generate_persona(),
