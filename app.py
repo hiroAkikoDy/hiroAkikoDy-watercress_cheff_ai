@@ -7,6 +7,7 @@ import uuid
 
 from dotenv import load_dotenv
 from flask import Flask, Response, jsonify, render_template, request, session, stream_with_context
+from flask_wtf.csrf import CSRFProtect
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
@@ -23,16 +24,19 @@ from dialog_engine import (
 )
 from persona_engine import generate_multi_persona_report
 
-# .envファイルから環境変数を読み込む（Render本番ではEnvironment Variablesを利用）
 load_dotenv()
+
+if not os.getenv("SECRET_KEY"):
+    raise RuntimeError("SECRET_KEY環境変数が設定されていません。本番環境では必須です。")
 
 print("=" * 80)
 print("【Neo4j RAGシステムを初期化中...】")
 print("=" * 80)
 
-# Flask アプリケーションの設定
 app = Flask(__name__)
-app.secret_key = os.getenv("SECRET_KEY") or os.urandom(24)
+app.secret_key = os.getenv("SECRET_KEY")
+
+csrf = CSRFProtect(app)
 
 if os.getenv("RENDER"):
     app.config.update(
@@ -40,6 +44,23 @@ if os.getenv("RENDER"):
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
     )
+
+try:
+    from flask_limiter import Limiter
+    from flask_limiter.util import get_remote_address
+    limiter = Limiter(
+        get_remote_address,
+        app=app,
+        default_limits=[],
+        storage_uri="memory://",
+    )
+    if os.getenv("RENDER"):
+        limiter._check_request_limit = lambda *a, **kw: None
+        app.wsgi_app = _proxy_fix(app.wsgi_app) if False else app.wsgi_app
+except ImportError:
+    limiter = None
+
+MAX_INPUT_LENGTH = 500
 
 # グローバル変数としてRAGコンポーネントを保持
 db = None
@@ -199,6 +220,9 @@ def chat():
         if not user_message:
             return jsonify({"error": "メッセージが空です"}), 400
 
+        if len(user_message) > MAX_INPUT_LENGTH:
+            return jsonify({"error": f"メッセージは{MAX_INPUT_LENGTH}文字以内で入力してください"}), 400
+
         if "messages" not in session:
             session["messages"] = []
 
@@ -305,6 +329,9 @@ def chat_stream():
         if not user_message:
             return jsonify({"error": "メッセージが空です"}), 400
 
+        if len(user_message) > MAX_INPUT_LENGTH:
+            return jsonify({"error": f"メッセージは{MAX_INPUT_LENGTH}文字以内で入力してください"}), 400
+
         if "messages" not in session:
             session["messages"] = []
 
@@ -403,6 +430,12 @@ def chat_stream():
                 ensure_ascii=False
             )
 
+            session["pending_report"] = {
+                "rag_context": rag_context,
+                "conditions": dialog_conditions,
+            }
+            session.modified = True
+
             def generate_report_start():
                 yield "data: __START_REPORT__\n\n"
                 yield f"data: {conditions_json}\n\n"
@@ -431,9 +464,14 @@ def start_report():
     非同期レポート生成を開始する（INV_15）
     即座にgeneratingを返し、バックグラウンドでレポートを生成する
     """
-    data = request.json or {}
-    rag_context = data.get("rag_context", "")
-    conditions = data.get("conditions", {})
+    pending = session.get("pending_report")
+    if not pending:
+        return jsonify({"error": "レポート対象が見つかりません"}), 400
+    rag_context = pending.get("rag_context", "")
+    conditions = pending.get("conditions", {})
+    session.pop("pending_report", None)
+    session.modified = True
+
     sid = session.get("session_id", str(uuid.uuid4()))
 
     def generate_in_background():
@@ -489,6 +527,11 @@ def interviewer_endpoint():
     user_answer = data.get("answer", "").strip()
     last_question_id = data.get("last_question_id", "")
 
+    if len(user_answer) > MAX_INPUT_LENGTH:
+        return jsonify({"error": f"回答は{MAX_INPUT_LENGTH}文字以内で入力してください"}), 400
+    if len(last_question_id) > 64:
+        return jsonify({"error": "無効なパラメータです"}), 400
+
     interview_conditions = session.get("interview_conditions", {})
     base_conditions = session.get("dialog_conditions", {})
 
@@ -535,6 +578,9 @@ def interviewer_endpoint():
 
 @app.route("/reset", methods=["POST"])
 def reset():
+    sid = session.get("session_id", "")
+    if sid and sid in report_cache:
+        del report_cache[sid]
     session.clear()
     session["messages"] = []
     return jsonify({"status": "ok"})

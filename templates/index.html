@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="csrf-token" content="{{ csrf_token() }}">
 <title>🌿 クレソンの使い方、聞いてみよう | ナナカファーム</title>
 <style>
   * {
@@ -84,6 +85,7 @@
     line-height: 1.6;
     font-size: 15px;
     word-wrap: break-word;
+    white-space: pre-wrap;
   }
 
   .message.user .message-content {
@@ -375,6 +377,11 @@
   let reportPollInterval = null;
   let currentQuestionId = null;
 
+  function csrfHeaders() {
+    const token = document.querySelector('meta[name="csrf-token"]')?.content || '';
+    return {'Content-Type': 'application/json', 'X-CSRFToken': token};
+  }
+
   function addMessage(content, isUser, sources = null) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${isUser ? 'user' : 'bot'}`;
@@ -385,7 +392,7 @@
 
     const messageContent = document.createElement('div');
     messageContent.className = 'message-content';
-    messageContent.innerHTML = content.replace(/\n/g, '<br>');
+    messageContent.textContent = content;
 
     // 出典がある場合は表示
     if (sources && sources.length > 0) {
@@ -394,7 +401,11 @@
 
       const sourcesHeader = document.createElement('div');
       sourcesHeader.className = 'sources-header';
-      sourcesHeader.innerHTML = '📚 参考にしたデータ <span class="sources-toggle">(クリックで表示/非表示)</span>';
+      sourcesHeader.textContent = '📚 参考にしたデータ ';
+      const toggleHint = document.createElement('span');
+      toggleHint.className = 'sources-toggle';
+      toggleHint.textContent = '(クリックで表示/非表示)';
+      sourcesHeader.appendChild(toggleHint);
 
       const sourcesList = document.createElement('div');
       sourcesList.className = 'sources-list collapsed';
@@ -456,7 +467,6 @@
   function appendBotDelta(messageContentEl, deltaText) {
     const current = messageContentEl.textContent || '';
     messageContentEl.textContent = current + deltaText;
-    messageContentEl.innerHTML = (messageContentEl.textContent || '').replace(/\n/g, '<br>');
     chatArea.scrollTop = chatArea.scrollHeight;
   }
 
@@ -525,24 +535,21 @@
     try {
       const response = await fetch('/chat_stream', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: csrfHeaders(),
         body: JSON.stringify({ message: message })
       });
 
       if (!response.ok) {
-        // フォールバック（非ストリーミング: 出典付き）
         const fallback = await fetch('/chat', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: csrfHeaders(),
           body: JSON.stringify({ message: message })
         });
         const data = await fallback.json();
         if (data.error) {
-          botEl.innerHTML = ('エラー: ' + data.error).replace(/\n/g, '<br>');
+          botEl.textContent = 'エラー: ' + data.error;
         } else {
-          // 出典表示を維持するため、通常描画関数で再描画（プレースホルダはそのまま簡易表示）
-          botEl.innerHTML = (data.reply || '').replace(/\n/g, '<br>');
-          // sourcesは“追記”ではなく、既存UI設計上は別メッセージに紐づくため、ここでは簡易に表示しない
+          botEl.textContent = data.reply || '';
         }
         return;
       }
@@ -563,7 +570,10 @@
             const token = line.slice(6).trim();
             if (token === '__START_REPORT__') {
               reportStarted = true;
-              botEl.innerHTML = '📋 レポートを生成中です...<br><span style="color:#666;font-size:13px;">（インタビューに答えると精度が上がります）</span>';
+              const reportLabel = document.createElement('span');
+              reportLabel.textContent = '📋 レポートを生成中です...\n（インタビューに答えると精度が上がります）';
+              botEl.textContent = '';
+              botEl.appendChild(reportLabel);
               continue;
             }
             if (reportStarted) {
@@ -579,13 +589,13 @@
       if (reportStarted && reportPayload) {
         try {
           const reportData = JSON.parse(reportPayload);
-          startReportAsync(reportData.rag_context, reportData.conditions);
+          startReportAsync();
         } catch(e) {
           console.error('レポートデータパースエラー:', e);
         }
       }
     } catch (error) {
-      botEl.innerHTML = '通信エラーが発生しました。もう一度お試しください。';
+      botEl.textContent = '通信エラーが発生しました。もう一度お試しください。';
     } finally {
       sendBtn.disabled = false;
       userInput.focus();
@@ -641,15 +651,11 @@
 
   userInput.focus();
 
-  async function startReportAsync(ragContext, conditions) {
+  async function startReportAsync() {
     try {
       await fetch('/start_report', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          rag_context: ragContext,
-          conditions: conditions
-        })
+        headers: csrfHeaders()
       });
 
       reportPollInterval = setInterval(checkReportStatus, 5000);
@@ -678,8 +684,12 @@
         avatar.textContent = '🌿';
         const content = document.createElement('div');
         content.className = 'message-content';
-        content.innerHTML = '📋 <strong>レポートが完成しました！</strong><br><br>' +
-          (data.report || '').replace(/\n/g, '<br>');
+        const reportLabel = document.createElement('span');
+        reportLabel.textContent = '📋 レポートが完成しました！\n\n';
+        const reportBody = document.createElement('span');
+        reportBody.textContent = data.report || '';
+        content.appendChild(reportLabel);
+        content.appendChild(reportBody);
         reportDiv.appendChild(avatar);
         reportDiv.appendChild(content);
         chatArea.appendChild(reportDiv);
@@ -699,7 +709,7 @@
     try {
       const res = await fetch('/interviewer', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: csrfHeaders(),
         body: JSON.stringify({answer: '', last_question_id: ''})
       });
       const data = await res.json();
@@ -719,7 +729,7 @@
     try {
       const res = await fetch('/interviewer', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: csrfHeaders(),
         body: JSON.stringify({
           answer: answer,
           last_question_id: currentQuestionId
