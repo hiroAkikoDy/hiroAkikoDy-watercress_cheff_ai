@@ -17,6 +17,17 @@ services:
         sync: false
       - key: ZAI_API_KEY
         sync: false
+      - key: OPENAI_API_KEY
+        sync: false
       - key: SECRET_KEY
         generateValue: true
-
+      - key: LLM_TIMEOUT
+        value: "120"
+      - key: LLM_MAX_TOKENS
+        value: "4096"
+      - key: RETRIEVER_K
+        value: "3"
+      - key: LLM_MODEL
+        value: "GLM-4.7-Flash"
+      - key: LLM_MAX_RETRIES
+        value: "4"

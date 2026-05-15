@@ -2,7 +2,7 @@
 
 > 熊本県産クレソンを手に取ったあなたに、今夜の食卓で使いこなせるレシピをご提案します。
 
-[![Python](https://img.shields.io/badge/Python-3.14-blue)](https://python.org)
+[![Python](https://img.shields.io/badge/Python-3.11-blue)](https://python.org)
 [![Flask](https://img.shields.io/badge/Flask-3.1.0-green)](https://flask.palletsprojects.com)
 [![LangChain](https://img.shields.io/badge/LangChain-Neo4j-orange)](https://python.langchain.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -24,6 +24,16 @@ Neo4j Graph RAGが最適なレシピを提案します。
 
 ---
 
+## スクリーンショット
+
+| チャットUI | 出典展開 | レポート完成 |
+|---|---|---|
+| ![チャットUI](docs/screenshots/chat-ui.png) | ![出典展開](docs/screenshots/sources-expanded.png) | ![レポート完成](docs/screenshots/report-complete.png) |
+
+> スクリーンショットは準備中です。実際の画面はデモをご覧ください。
+
+---
+
 ## 特徴
 
 - **Graph RAG**：Neo4j Aura + LangChain Hybrid Search（ベクトル＋キーワード）
@@ -40,6 +50,8 @@ Neo4j Graph RAGが最適なレシピを提案します。
 ユーザーの質問
     ↓
 Flask（/chat_stream）
+    ↓
+Tool Selector（TYPE_0/TYPE_1/TYPE_3）
     ↓
 LangChain Hybrid Search
   ├── ベクトル検索（OpenAI Embeddings）
@@ -63,7 +75,7 @@ Z.ai GLM-4.7-Flash（回答生成）
 | RAGフレームワーク | LangChain Neo4j |
 | ベクトルDB | Neo4j Aura Free |
 | Embedding | OpenAI text-embedding-3-small |
-| デプロイ | Render（有料プラン） |
+| デプロイ | Render Free Plan（15分アクセスなしでスリープ） |
 | コーディングエージェント | Kilo Code × Z.ai BYOK |
 
 ---
@@ -72,10 +84,10 @@ Z.ai GLM-4.7-Flash（回答生成）
 
 ### 前提条件
 
-- Python 3.14+
+- Python 3.11+
 - Neo4j Aura Freeアカウント（[無料登録](https://neo4j.com/cloud/aura-free/)）
 - Z.ai APIキー（[Z.ai](https://z.ai)）
-- OpenAI APIキー（Embeddingのみ・$5チャージで数年分）
+- OpenAI APIキー（Embedding + ペルソナ生成・$5チャージで数年分）
 
 ### インストール
 
@@ -108,6 +120,23 @@ SECRET_KEY=任意のランダム文字列
 
 > ⚠️ `.env` は絶対にGitにコミットしないでください
 
+### 環境変数一覧
+
+| 変数名 | 必須 | デフォルト | 用途 |
+|---|---|---|---|
+| `ZAI_API_KEY` | ✅ | - | Z.ai GLM-4.7-Flash APIキー |
+| `NEO4J_URI` | ✅ | - | Neo4j Aura接続URI |
+| `NEO4J_USERNAME` | ✅ | - | Neo4jユーザー名（Aura FreeではDB名と同じ） |
+| `NEO4J_PASSWORD` | ✅ | - | Neo4jパスワード |
+| `OPENAI_API_KEY` | ✅ | - | OpenAI APIキー（Embedding + ペルソナ生成） |
+| `SECRET_KEY` | ✅ | - | Flask セッション暗号化キー |
+| `LLM_TIMEOUT` | 任意 | `120` | LLM API タイムアウト（秒） |
+| `LLM_MAX_TOKENS` | 任意 | `4096` | LLM 最大トークン数 |
+| `LLM_MAX_RETRIES` | 任意 | `4` | LLM リトライ回数 |
+| `LLM_MODEL` | 任意 | `GLM-4.7-Flash` | LLM モデル名 |
+| `RETRIEVER_K` | 任意 | `3` | RAG 検索件数 |
+| `PORT` | 任意 | `5000` | ローカル起動ポート |
+
 ### Neo4jデータの投入
 
 ```bash
@@ -130,12 +159,18 @@ python app.py
 ```
 hiroAkikoDy-watercress_cheff_ai/
 ├── app.py                         # Flaskメインアプリ
+├── tool_selector.py               # Tool Selector（TYPE_0/TYPE_1/TYPE_3分類）
+├── dialog_engine.py               # TYPE_3対話エンジン
+├── persona_engine.py              # マルチペルソナ生成
+├── interviewer_engine.py          # インタビュアーAI
 ├── templates/
-│   ├── index.html                 # BtoC向けチャットUI
-│   └── chat_link.html             # nanaka-farm.com埋め込み用
+│   └── index.html                 # BtoC向けチャットUI
 ├── requirements.txt               # 依存パッケージ
 ├── render.yaml                    # Renderデプロイ設定
+├── SECURITY.md                    # 脆弱性報告ポリシー
 ├── AGENTS.md                      # Kilo Code用プロジェクト説明書
+├── docs/
+│   └── screenshots/               # スクリーンショット
 ├── work_reports/                  # 作業レポート
 └── langchain_study/               # 学習・実験スクリプト
     ├── langchain_neo4j_setup.py   # クレソンデータ投入
@@ -153,12 +188,12 @@ hiroAkikoDy-watercress_cheff_ai/
 
 | 弾 | タイトル | 内容 |
 |---|---|---|
-| vol.0 | [Claudeと作った「世界のクレソン料理アトラス」](https://zenn.dev/hiroakikody/articles/d553384e195f0b) | はじめてのWebアプリ公開 |
 | Vol.1 | [参考書のサンプルコードをZ.aiで動かした](https://zenn.dev/hiroakikody/articles/e6ed27a649fcec) | Z.ai GLM-4.7-Flash × OpenAI互換API |
 | Vol.2 | [熊本のクレソン農家がAIチャットボットを作った](https://zenn.dev/hiroakikody/articles/ed0332b4c0f292) | Systemプロンプトのカスタマイズ・Flask化 |
 | Vol.3 | [LLMのAPIを「概念と構造」で理解する](https://zenn.dev/hiroakikody/articles/0de29fff1522f5) | temperature・RAG・Session・10問クイズ |
 | Vol.4 | [Claude Code×Render デプロイ5時間の記録](https://zenn.dev/hiroakikody/articles/73047160d069b8) | GLM-4.7推論モードエラー・Gunicornの罠 |
-| Vol.5 | Neo4j × LangChain × Z.aiでRAGを作った | Graph RAG・Hybrid Search・keepalive |
+| Vol.5 | [Neo4j × LangChain × Z.aiでRAGを作った](https://zenn.dev/hiroakikody/articles/d553384e195f0b) | Graph RAG・Hybrid Search・keepalive |
+| Vol.6 | 執筆中 | Phase 4 マルチペルソナ×対話型絞り込み |
 
 ---
 
@@ -171,12 +206,12 @@ hiroAkikoDy-watercress_cheff_ai/
 ```python
 # GLM-4.7はデフォルトで推論モード（thinking mode）が有効
 # reasoning_contentが先にトークンを消費するため
-# max_tokens=2048以上が必須
+# max_tokens=4096以上が必須
 
 response = client.chat.completions.create(
     model="GLM-4.7-Flash",
     messages=messages,
-    max_tokens=2048  # これがないと0バイトになる
+    max_tokens=4096  # これがないと0バイトになる
 )
 
 # contentが空のときのフォールバック
@@ -212,11 +247,24 @@ if __name__ == "__main__":
 
 ```
 ✅ Phase 1:  Flask + Z.ai → Renderデプロイ
-✅ Phase 3a: Neo4j RAG + Hybrid Search → BtoC版本番公開
-🎯 Phase 3b: Tool Selector（3ツール自動選択）
-⏳ Phase 4:  マルチペルソナ × 複数モデル議論AI
+✅ Phase 2:  Neo4j RAG + Hybrid Search → BtoC版本番公開
+✅ Phase 3:  Tool Selector（3ツール自動選択）
+✅ Phase 4:  マルチペルソナ × 対話型絞り込み + 非同期レポート
 ⏳ Phase 5:  半自動営業ツール化
 ```
+
+> Phase 2の番号欠番について：当初Phase 2はGraph RAGの実験フェーズでした。
+> Phase 1（Flask基盤）→ Phase 2（RAG実験）→ Phase 3（Tool Selector）→ Phase 4（対話型）と進行しました。
+> 番号を詰めず、実験の軌跡を残すために欠番のままとしています。
+
+---
+
+## 関連ドキュメント
+
+- [AGENTS.md](AGENTS.md) — 不変条件（INV_1〜INV_18）・技術スタック・コーディング規約
+- [SECURITY.md](SECURITY.md) — 脆弱性報告ポリシー
+- [docs/screenshots/](docs/screenshots/) — スクリーンショット
+- [work_reports/](work_reports/) — 作業レポート
 
 ---
 
@@ -225,8 +273,7 @@ if __name__ == "__main__":
 本プロジェクトは以下のAI駆動開発ツールで構築されています：
 
 - **Kilo Code**（VSCode拡張）× **Z.ai GLM-4.7 BYOK**
-- **Claude Sonnet 4.6**（設計・レビュー・ブログ執筆）
-- コミットメッセージに `Co-Authored-By: Claude Sonnet 4.6` を記録
+- コミットメッセージに `Co-Authored-By: Kilo Code` を記録
 
 ---
 
