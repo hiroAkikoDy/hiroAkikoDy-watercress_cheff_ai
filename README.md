@@ -46,22 +46,31 @@ Neo4j Graph RAGが最適なレシピを提案します。
 
 ## アーキテクチャ
 
-```
-ユーザーの質問
-    ↓
-Flask（/chat_stream）
-    ↓
-Tool Selector（TYPE_0/TYPE_1/TYPE_3）
-    ↓
-LangChain Hybrid Search
-  ├── ベクトル検索（OpenAI Embeddings）
-  └── キーワード検索（Neo4j全文インデックス）
-    ↓
-Neo4j Aura Free（190品のクレソン料理グラフ）
-    ↓
-Z.ai GLM-4.7-Flash（回答生成）
-    ↓
-ストリーミングレスポンス
+```mermaid
+flowchart TB
+    U[ユーザーの質問] --> F[Flask /chat_stream]
+    F --> TS[Tool Selector]
+    TS -->|TYPE_0 挨拶| R0[定型応答を返却]
+    TS -->|TYPE_1 キーワード| R1[Neo4j Cypher検索]
+    TS -->|TYPE_3 対話| D[対話エンジン]
+    D -->|条件収集中| Q[追加質問]
+    D -->|条件完了| RAG[Hybrid Search]
+    R1 --> LLM[Z.ai GLM-4.7-Flash]
+    RAG --> LLM
+    LLM --> STR[ストリーミングレスポンス]
+    RAG -->|レポート生成| RP[非同期レポート]
+    RP --> IV[インタビュアーAI]
+    RP --> DONE[レポート完成]
+
+    subgraph Neo4j Aura Free
+        HS[Hybrid Search]
+        VS[ベクトル検索<br/>OpenAI Embeddings]
+        KS[キーワード検索<br/>全文インデックス]
+        HS --- VS
+        HS --- KS
+    end
+
+    RAG --> HS
 ```
 
 ---
