@@ -2,26 +2,24 @@ import logging
 import threading
 import time
 
-from app.rag import initialize_rag_system
-
 logger = logging.getLogger(__name__)
 
 
 def neo4j_keepalive():
-    from app.rag import db
+    import app.rag as rag_module
     time.sleep(30)
     max_retries = 5
     consecutive_failures = 0
     while True:
         try:
-            _db = db()
+            _db = rag_module.db
             if _db is not None:
                 _db._driver.verify_connectivity()
                 logger.info("Neo4j keepalive: OK")
                 consecutive_failures = 0
             else:
                 logger.warning("Neo4j db が未初期化、初期化を試みます")
-                initialize_rag_system()
+                rag_module.initialize_rag_system()
         except Exception as e:
             consecutive_failures += 1
             if consecutive_failures > max_retries:
