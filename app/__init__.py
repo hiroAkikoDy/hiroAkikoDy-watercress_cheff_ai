@@ -39,7 +39,8 @@ csrf = CSRFProtect()
 
 
 def create_app():
-    _app = Flask(__name__)
+    _template_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "templates")
+    _app = Flask(__name__, template_folder=_template_dir)
     _app.secret_key = os.getenv("SECRET_KEY")
 
     if os.getenv("RENDER"):
