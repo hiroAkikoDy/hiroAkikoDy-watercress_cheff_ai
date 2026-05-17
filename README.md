@@ -154,6 +154,17 @@ python notion_to_neo4j.py   # Notionからデータ取得
 python langchain_neo4j_setup.py  # Neo4jに190品を投入
 ```
 
+### 自己進化グラフのスキーマ初期化（初回のみ）
+
+```bash
+python scripts/run_cypher.py scripts/init_evolution_schema.cypher
+```
+
+確認：
+```bash
+python scripts/verify_evolution_schema.py
+```
+
 ### アプリの起動
 
 ```bash
@@ -176,6 +187,10 @@ hiroAkikoDy-watercress_cheff_ai/
 │   └── index.html                 # BtoC向けチャットUI
 ├── requirements.txt               # 依存パッケージ
 ├── render.yaml                    # Renderデプロイ設定
+├── scripts/                       # Neo4jスキーマ管理スクリプト
+│   ├── init_evolution_schema.cypher  # 自己進化グラフ用スキーマ
+│   ├── run_cypher.py                 # Cypherファイル実行ユーティリティ
+│   └── verify_evolution_schema.py    # スキーマ確認スクリプト
 ├── SECURITY.md                    # 脆弱性報告ポリシー
 ├── AGENTS.md                      # Kilo Code用プロジェクト説明書
 ├── docs/
