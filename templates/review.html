@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🌿 自己進化グラフ レビュー画面</title>
+  <style>
+    body {
+      font-family: 'Yu Gothic', sans-serif;
+      background: #f5f5f5;
+      margin: 0;
+      padding: 20px;
+    }
+    h1 { color: #2D5A27; }
+    .stats { background: white; padding: 12px 16px; border-radius: 8px;
+             margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    .card {
+      background: white;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .card h3 { margin: 0 0 8px; color: #2D5A27; }
+    .meta { color: #888; font-size: 13px; margin-bottom: 8px; }
+    .confidence { font-weight: bold; }
+    .confidence.high { color: #2D5A27; }
+    .confidence.mid  { color: #f09000; }
+    .confidence.low  { color: #c00; }
+    .payload {
+      background: #f8f8f8;
+      border-radius: 4px;
+      padding: 10px;
+      font-size: 12px;
+      white-space: pre-wrap;
+      max-height: 200px;
+      overflow-y: auto;
+      margin-bottom: 12px;
+    }
+    .actions { display: flex; gap: 8px; }
+    .btn-approve {
+      background: #2D5A27; color: white;
+      border: none; border-radius: 6px;
+      padding: 8px 20px; cursor: pointer; font-size: 14px;
+    }
+    .btn-approve:hover { background: #43a047; }
+    .btn-reject {
+      background: #c00; color: white;
+      border: none; border-radius: 6px;
+      padding: 8px 20px; cursor: pointer; font-size: 14px;
+    }
+    .btn-reject:hover { background: #e53935; }
+    .empty { text-align: center; color: #888; padding: 40px; }
+  </style>
+</head>
+<body>
+  <h1>🌿 自己進化グラフ レビュー画面</h1>
+  <div class="stats" id="stats">読み込み中...</div>
+
+  {% if rows %}
+    {% for row in rows %}
+    <div class="card" id="card-{{ row.id }}">
+      <h3>
+        {{ row.action }}
+        {% if row.payload.recipe_name %}— {{ row.payload.recipe_name }}{% endif %}
+      </h3>
+      <div class="meta">
+        agent: {{ row.agent }} ｜
+        confidence:
+        <span class="confidence
+          {% if row.confidence >= 0.8 %}high
+          {% elif row.confidence >= 0.7 %}mid
+          {% else %}low{% endif %}">
+          {{ "%.2f"|format(row.confidence) }}
+        </span>
+        ｜ {{ row.created_at }}
+      </div>
+      {% if row.payload.ingredients %}
+      <div class="meta">
+        🥬 食材: {{ row.payload.ingredients | map(attribute='name') | join(', ') }}
+      </div>
+      {% endif %}
+      {% if row.payload.cooking_methods %}
+      <div class="meta">
+        🍳 調理法: {{ row.payload.cooking_methods | join(', ') }}
+      </div>
+      {% endif %}
+      {% if row.payload.intents %}
+      <div class="meta">
+        🎯 用途: {{ row.payload.intents | join(', ') }}
+      </div>
+      {% endif %}
+      <div class="payload">{{ row.payload | tojson(indent=2, ensure_ascii=False) }}</div>
+      <div class="actions">
+        <button class="btn-approve" onclick="decide('{{ row.id }}', 'approve')">
+          ✅ 承認
+        </button>
+        <button class="btn-reject" onclick="decide('{{ row.id }}', 'reject')">
+          ❌ 却下
+        </button>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty">
+      <p>✅ 承認待ちの提案はありません</p>
+    </div>
+  {% endif %}
+
+  <script>
+    async function decide(id, decision) {
+      const card = document.getElementById('card-' + id);
+      const res = await fetch('/review/' + id + '/' + decision, {method: 'POST'});
+      const data = await res.json();
+      if (data.ok) {
+        card.style.opacity = '0.4';
+        card.style.pointerEvents = 'none';
+        const label = decision === 'approve' ? '✅ 承認済み' : '❌ 却下済み';
+        card.querySelector('h3').textContent += '  ' + label;
+      } else {
+        alert('エラー: ' + (data.error || '不明'));
+      }
+    }
+
+    fetch('/review/stats')
+      .then(r => r.json())
+      .then(d => {
+        document.getElementById('stats').innerHTML =
+          `pending: <b>${d.pending || 0}</b> ｜ ` +
+          `approved: <b>${d.approved || 0}</b> ｜ ` +
+          `rejected: <b>${d.rejected || 0}</b>`;
+      });
+  </script>
+</body>
+</html>
