@@ -6,10 +6,12 @@ StagedChange に積む（本番グラフを直接書き換えない）。
 
 承認時のアクション名: "create_recipe"
 """
+import os
 import sys
 import time
 
 sys.stdout.reconfigure(encoding="utf-8")
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agents.base import ask_llm_openai, get_driver, parse_json_response, stage, DB_NAME
 

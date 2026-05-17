@@ -2,8 +2,10 @@
 Step 1 動作確認スクリプト。
 ダミーのChunkテキストを渡してStagedChangeが1件作成されることを確認する。
 """
+import os
 import sys
 sys.stdout.reconfigure(encoding="utf-8")
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agents.base import get_driver, DB_NAME
 from agents import recipe_extractor
