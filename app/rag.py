@@ -71,21 +71,27 @@ def rerank_by_final_score(docs, driver=None, db_name=None):
         scores = {}
         with _driver.session(database=_db_name) as session:
             for doc in docs:
-                chunk_text = doc.page_content[:80]
+                snippet = doc.page_content[:60].strip()
                 result = session.run(
                     """
                     MATCH (c:Chunk)-[:DESCRIBES]->(r:Recipe)
-                    WHERE c.text STARTS WITH $prefix
-                    RETURN r.final_score AS fs, r.validated AS v
+                    WHERE c.text CONTAINS $snippet
+                    RETURN r.final_score AS fs, r.validated AS v,
+                           r.name AS name
                     LIMIT 1
                     """,
-                    prefix=chunk_text,
+                    snippet=snippet[:40],
                 )
                 record = result.single()
                 if record and record["fs"] is not None:
                     scores[id(doc)] = record["fs"]
+                    doc.metadata["final_score"] = record["fs"]
+                    doc.metadata["validated"] = record["v"]
+                    doc.metadata["recipe_name"] = record["name"]
                 else:
                     scores[id(doc)] = 0.45
+                    doc.metadata["final_score"] = 0.45
+                    doc.metadata["validated"] = False
         return sorted(docs, key=lambda d: scores.get(id(d), 0.45), reverse=True)
     except Exception as e:
         logger.warning("rerank_by_final_score error: %s", e)
