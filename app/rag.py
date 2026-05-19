@@ -3,7 +3,7 @@ import os
 
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnablePassthrough
+from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 from langchain_neo4j import Neo4jVector
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
@@ -52,7 +52,44 @@ def format_docs(docs):
         formatted.append(f"   - 地域: {doc.metadata.get('region', '不明')}")
         formatted.append(f"   - 季節: {doc.metadata.get('season', '不明')}")
         formatted.append(f"   - 用途: {doc.metadata.get('use_case', '不明')}")
+        validated = doc.metadata.get("validated")
+        if validated is not None:
+            score = doc.metadata.get("final_score", 0)
+            mark = "★実食検証済" if validated else ""
+            formatted.append(f"   - 検証スコア: {score:.2f} {mark}")
     return "\n".join(formatted)
+
+
+def rerank_by_final_score(docs, driver=None, db_name=None):
+    if not docs:
+        return docs
+    if driver is None and db is None:
+        return docs
+    _driver = driver or db._driver
+    _db_name = db_name or os.getenv("NEO4J_USERNAME")
+    try:
+        scores = {}
+        with _driver.session(database=_db_name) as session:
+            for doc in docs:
+                chunk_text = doc.page_content[:80]
+                result = session.run(
+                    """
+                    MATCH (c:Chunk)-[:DESCRIBES]->(r:Recipe)
+                    WHERE c.text STARTS WITH $prefix
+                    RETURN r.final_score AS fs, r.validated AS v
+                    LIMIT 1
+                    """,
+                    prefix=chunk_text,
+                )
+                record = result.single()
+                if record and record["fs"] is not None:
+                    scores[id(doc)] = record["fs"]
+                else:
+                    scores[id(doc)] = 0.45
+        return sorted(docs, key=lambda d: scores.get(id(d), 0.45), reverse=True)
+    except Exception as e:
+        logger.warning("rerank_by_final_score error: %s", e)
+        return docs
 
 
 def initialize_rag_system():
@@ -87,8 +124,10 @@ def initialize_rag_system():
 
         prompt = ChatPromptTemplate.from_template(SYSTEM_PROMPT_TEMPLATE)
 
+        _rerank = RunnableLambda(lambda docs: rerank_by_final_score(docs))
+
         rag_chain = (
-            {"context": retriever | format_docs, "question": RunnablePassthrough()}
+            {"context": retriever | _rerank | format_docs, "question": RunnablePassthrough()}
             | prompt
             | llm
             | StrOutputParser()

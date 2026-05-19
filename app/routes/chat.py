@@ -8,7 +8,7 @@ from flask import Blueprint, Response, jsonify, render_template, request, sessio
 
 from app.rag import (
     db, retriever, rag_chain, type0_map, type1_map,
-    ensure_rag_system_initialized, format_docs,
+    ensure_rag_system_initialized, format_docs, rerank_by_final_score,
 )
 from tool_selector import (
     classify, get_type0_response, get_type1_response,
@@ -71,6 +71,7 @@ def chat():
             try:
                 t0 = time.time()
                 source_docs = retriever.invoke(user_message)
+                source_docs = rerank_by_final_score(source_docs)
                 context_str = format_docs(source_docs)
                 from app.rag import rag_chain as _chain
                 response = _chain.invoke(user_message)
@@ -229,6 +230,7 @@ def chat_stream():
             try:
                 from app.rag import retriever as _retriever
                 source_docs = _retriever.invoke(rag_query)
+                source_docs = rerank_by_final_score(source_docs)
                 rag_context = format_docs(source_docs)
             except Exception as e:
                 logger.error("TYPE_3 RAG検索エラー: %s", e)
