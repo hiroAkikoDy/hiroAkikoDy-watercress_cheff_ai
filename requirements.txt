@@ -4,7 +4,7 @@ flask-limiter==3.12
 cachelib==0.13.0
 openai==2.32.0
 python-dotenv==1.2.2
-gunicorn==23.0.0
+gunicorn==26.0.0
 langchain-neo4j==0.9.0
 langchain-openai==1.2.1
 langchain-core==1.3.2
