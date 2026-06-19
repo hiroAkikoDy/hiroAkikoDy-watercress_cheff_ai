@@ -14,5 +14,5 @@ spacy==3.8.13
 ja_core_news_sm @ https://github.com/explosion/spacy-models/releases/download/ja_core_news_sm-3.8.0/ja_core_news_sm-3.8.0-py3-none-any.whl
 
 # dev / test
-pytest==8.3.5
+pytest==9.0.3
 ruff==0.11.7
